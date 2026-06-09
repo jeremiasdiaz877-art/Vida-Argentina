@@ -1,0 +1,1459 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Vida Argentina — El Juego de la Vida Económica</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Segoe UI', system-ui, sans-serif; background: #f0f4f8; min-height: 100vh; color: #1a1a2e; }
+
+/* SCREENS */
+.screen { display: none; min-height: 100vh; }
+.screen.active { display: flex; flex-direction: column; }
+
+/* COLORS */
+:root {
+  --azul: #1a3a6b;
+  --azul-med: #2557a7;
+  --azul-claro: #4a90d9;
+  --celeste: #74b9ff;
+  --amarillo: #f9ca24;
+  --amarillo-dark: #d4a017;
+  --blanco: #ffffff;
+  --gris: #f8f9fa;
+  --gris-med: #e9ecef;
+  --gris-dark: #6c757d;
+  --verde: #00b894;
+  --rojo: #d63031;
+  --naranja: #e17055;
+}
+
+/* BOTONES */
+.btn {
+  padding: 14px 24px; border-radius: 12px; border: none; cursor: pointer;
+  font-size: 16px; font-weight: 600; transition: all 0.2s; width: 100%;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+}
+.btn-primary { background: var(--azul); color: white; }
+.btn-primary:hover { background: var(--azul-med); transform: translateY(-1px); }
+.btn-secondary { background: transparent; color: var(--azul); border: 2px solid var(--azul); }
+.btn-secondary:hover { background: var(--azul); color: white; }
+.btn-amarillo { background: var(--amarillo); color: var(--azul); }
+.btn-amarillo:hover { background: var(--amarillo-dark); }
+.btn-verde { background: var(--verde); color: white; }
+.btn-rojo { background: var(--rojo); color: white; }
+.btn-sm { padding: 8px 16px; font-size: 14px; width: auto; }
+
+/* PANTALLA INICIO */
+#pantalla-inicio {
+  background: linear-gradient(160deg, #0a1628 0%, #1a3a6b 50%, #0a1628 100%);
+  align-items: center; justify-content: center; padding: 40px 20px;
+}
+.logo-container { text-align: center; margin-bottom: 40px; }
+.logo-vida { font-size: 72px; font-weight: 900; color: white; letter-spacing: -2px; line-height: 1; }
+.logo-argentina { font-size: 36px; font-weight: 300; color: var(--celeste); letter-spacing: 8px; }
+.logo-sub { color: rgba(255,255,255,0.5); font-size: 13px; letter-spacing: 3px; margin-top: 8px; }
+.inicio-btns { width: 100%; max-width: 400px; display: flex; flex-direction: column; gap: 12px; }
+.inicio-reglas { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 16px; padding: 20px; max-width: 400px; width: 100%; margin-top: 8px; }
+.inicio-reglas h3 { color: var(--celeste); font-size: 13px; letter-spacing: 2px; margin-bottom: 12px; }
+.inicio-reglas li { color: rgba(255,255,255,0.7); font-size: 14px; margin-bottom: 6px; list-style: none; display: flex; gap: 8px; }
+
+/* PANTALLA SALA */
+#pantalla-sala { background: #f0f4f8; align-items: center; justify-content: center; padding: 40px 20px; }
+.sala-card { background: white; border-radius: 20px; padding: 32px; max-width: 500px; width: 100%; box-shadow: 0 4px 24px rgba(0,0,0,0.08); }
+.sala-titulo { font-size: 28px; font-weight: 800; color: var(--azul); text-align: center; margin-bottom: 8px; letter-spacing: 2px; }
+.sala-sub { color: var(--gris-dark); text-align: center; font-size: 14px; margin-bottom: 28px; }
+.sala-tab { display: flex; gap: 8px; margin-bottom: 24px; background: var(--gris); border-radius: 10px; padding: 4px; }
+.sala-tab-btn { flex: 1; padding: 10px; border: none; background: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 600; color: var(--gris-dark); transition: all 0.2s; }
+.sala-tab-btn.active { background: white; color: var(--azul); box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+.sala-content { display: none; }
+.sala-content.active { display: block; }
+.sala-input { width: 100%; padding: 12px 16px; border: 2px solid var(--gris-med); border-radius: 10px; font-size: 16px; margin-bottom: 12px; outline: none; transition: border 0.2s; }
+.sala-input:focus { border-color: var(--azul-claro); }
+.codigo-display { background: var(--azul); color: white; border-radius: 12px; padding: 20px; text-align: center; margin: 16px 0; }
+.codigo-num { font-size: 42px; font-weight: 900; letter-spacing: 8px; font-family: monospace; }
+.codigo-label { font-size: 12px; opacity: 0.7; margin-top: 4px; }
+
+/* JUGADORES CONFIG */
+#pantalla-jugadores { background: #f0f4f8; align-items: center; justify-content: flex-start; padding: 40px 20px; }
+.jugadores-titulo { font-size: 28px; font-weight: 800; color: var(--azul); text-align: center; margin-bottom: 6px; letter-spacing: 2px; }
+.jugadores-sub { color: var(--gris-dark); text-align: center; font-size: 14px; margin-bottom: 24px; }
+.jugador-card { background: white; border-radius: 16px; padding: 16px 20px; margin-bottom: 12px; display: flex; align-items: center; gap: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+.jugador-num { font-size: 12px; color: var(--gris-dark); margin-bottom: 8px; font-weight: 600; }
+.avatares { display: flex; gap: 6px; }
+.avatar-opt { font-size: 28px; cursor: pointer; padding: 4px; border-radius: 8px; border: 2px solid transparent; transition: all 0.2s; }
+.avatar-opt.selected { border-color: var(--azul); background: rgba(26,58,107,0.1); }
+.nombre-input { border: 2px solid var(--gris-med); border-radius: 8px; padding: 8px 12px; font-size: 14px; flex: 1; outline: none; }
+.nombre-input:focus { border-color: var(--azul-claro); }
+.contador-jugadores { display: flex; align-items: center; gap: 20px; justify-content: center; margin-bottom: 24px; }
+.contador-btn { width: 36px; height: 36px; border-radius: 50%; border: 2px solid var(--azul); background: white; color: var(--azul); font-size: 20px; cursor: pointer; display: flex; align-items: center; justify-content: center; font-weight: bold; }
+.contador-num { font-size: 32px; font-weight: 800; color: var(--azul); min-width: 40px; text-align: center; }
+
+/* SETUP JUGADOR */
+#pantalla-setup { background: #f0f4f8; align-items: center; justify-content: flex-start; padding: 20px; overflow-y: auto; }
+.setup-header { text-align: center; margin-bottom: 20px; }
+.setup-avatar { font-size: 52px; }
+.setup-nombre { font-size: 24px; font-weight: 800; color: var(--azul); }
+.setup-paso { font-size: 13px; color: var(--gris-dark); }
+.setup-progress { display: flex; gap: 6px; justify-content: center; margin: 12px 0; }
+.setup-dot { width: 24px; height: 4px; border-radius: 2px; background: var(--gris-med); }
+.setup-dot.active { background: var(--azul); }
+.opcion-card { background: white; border-radius: 12px; padding: 14px 18px; margin-bottom: 8px; cursor: pointer; border: 2px solid transparent; transition: all 0.2s; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 2px 6px rgba(0,0,0,0.05); }
+.opcion-card:hover { border-color: var(--azul-claro); transform: translateY(-1px); }
+.opcion-card.selected { border-color: var(--azul); background: rgba(26,58,107,0.04); }
+.opcion-nombre { font-weight: 600; font-size: 15px; }
+.opcion-detail { font-size: 12px; color: var(--gris-dark); margin-top: 2px; }
+.opcion-badge { font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 6px; white-space: nowrap; }
+.badge-verde { background: #d4edda; color: #155724; }
+.badge-rojo { background: #f8d7da; color: #721c24; }
+.badge-azul { background: #cce5ff; color: #004085; }
+.back-btn { display: flex; align-items: center; gap: 6px; color: var(--azul-med); font-size: 14px; cursor: pointer; margin-bottom: 16px; border: none; background: none; padding: 0; }
+
+/* TABLERO DE JUEGO */
+#pantalla-juego { background: #f0f4f8; display: flex; flex-direction: column; }
+.juego-header { background: var(--azul); padding: 12px 16px; display: flex; gap: 8px; overflow-x: auto; }
+.jugador-hud { background: rgba(255,255,255,0.1); border-radius: 10px; padding: 10px 14px; min-width: 120px; cursor: pointer; border: 2px solid transparent; transition: all 0.2s; flex-shrink: 0; }
+.jugador-hud.activo { background: rgba(255,255,255,0.25); border-color: var(--amarillo); }
+.hud-nombre { color: white; font-size: 12px; font-weight: 600; white-space: nowrap; }
+.hud-saldo { color: var(--amarillo); font-size: 14px; font-weight: 700; }
+.hud-avatar { font-size: 20px; }
+
+.juego-main { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px 16px; }
+.dado-container { text-align: center; margin-bottom: 24px; }
+.dado { font-size: 80px; cursor: pointer; transition: transform 0.2s; display: inline-block; }
+.dado:hover { transform: scale(1.05); }
+.dado.girando { animation: girar 0.5s ease-out; }
+@keyframes girar { 0% { transform: rotate(0deg) scale(1); } 50% { transform: rotate(180deg) scale(1.2); } 100% { transform: rotate(360deg) scale(1); } }
+.turno-info { text-align: center; margin-bottom: 20px; }
+.turno-jugador { font-size: 20px; font-weight: 800; color: var(--azul); display: flex; align-items: center; gap: 8px; justify-content: center; }
+.turno-ronda { font-size: 13px; color: var(--gris-dark); margin-top: 4px; }
+
+.juego-footer { background: white; border-top: 1px solid var(--gris-med); padding: 12px; display: flex; gap: 8px; overflow-x: auto; }
+.footer-btn { padding: 10px 14px; border: 1.5px solid var(--gris-med); border-radius: 10px; background: white; cursor: pointer; font-size: 12px; font-weight: 600; color: var(--azul); white-space: nowrap; transition: all 0.2s; display: flex; flex-direction: column; align-items: center; gap: 2px; flex-shrink: 0; }
+.footer-btn:hover { border-color: var(--azul); background: rgba(26,58,107,0.05); }
+.footer-btn .icon { font-size: 18px; }
+
+/* MODAL */
+.modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: flex; align-items: flex-end; justify-content: center; z-index: 1000; }
+.modal-overlay.center { align-items: center; }
+.modal { background: white; border-radius: 24px 24px 0 0; padding: 24px; width: 100%; max-width: 500px; max-height: 90vh; overflow-y: auto; }
+.modal.center { border-radius: 20px; margin: 16px; }
+.modal-titulo { font-size: 20px; font-weight: 800; color: var(--azul); margin-bottom: 16px; }
+.modal-close { float: right; background: var(--gris); border: none; border-radius: 50%; width: 32px; height: 32px; cursor: pointer; font-size: 18px; }
+
+/* EVENTO */
+.evento-card { background: var(--azul); border-radius: 16px; padding: 24px; text-align: center; margin-bottom: 20px; }
+.evento-emoji { font-size: 52px; margin-bottom: 12px; }
+.evento-titulo { color: white; font-size: 20px; font-weight: 800; margin-bottom: 8px; }
+.evento-desc { color: rgba(255,255,255,0.8); font-size: 14px; line-height: 1.5; }
+.evento-impacto { font-size: 22px; font-weight: 900; margin-top: 12px; }
+.impacto-pos { color: var(--amarillo); }
+.impacto-neg { color: #ff7675; }
+
+/* PRESTAMOS */
+.prestamo-opcion { background: var(--gris); border-radius: 12px; padding: 14px; margin-bottom: 8px; cursor: pointer; border: 2px solid transparent; transition: all 0.2s; }
+.prestamo-opcion:hover { border-color: var(--azul-claro); }
+.prestamo-opcion.selected { border-color: var(--azul); background: rgba(26,58,107,0.05); }
+.prestamo-nombre { font-weight: 700; font-size: 15px; }
+.prestamo-detalle { font-size: 12px; color: var(--gris-dark); }
+.prestamo-resumen { background: #fff3cd; border: 1px solid #ffc107; border-radius: 10px; padding: 14px; margin: 12px 0; font-size: 14px; }
+
+/* MERCADO */
+.mercado-item { background: white; border: 1px solid var(--gris-med); border-radius: 12px; padding: 14px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; }
+.mercado-nombre { font-weight: 600; font-size: 15px; }
+.mercado-precio { font-weight: 700; color: var(--azul); }
+.mercado-retorno { font-size: 12px; color: var(--verde); }
+
+/* VICTORIA */
+#pantalla-victoria { background: linear-gradient(160deg, #0a1628 0%, #1a3a6b 100%); align-items: center; justify-content: center; padding: 40px 20px; text-align: center; }
+.victoria-emoji { font-size: 80px; margin-bottom: 20px; }
+.victoria-titulo { color: var(--amarillo); font-size: 36px; font-weight: 900; margin-bottom: 8px; }
+.victoria-nombre { color: white; font-size: 24px; margin-bottom: 4px; }
+.victoria-saldo { color: var(--celeste); font-size: 18px; margin-bottom: 32px; }
+.ranking-item { background: rgba(255,255,255,0.1); border-radius: 12px; padding: 14px 20px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; width: 100%; max-width: 400px; }
+.ranking-pos { color: var(--amarillo); font-weight: 800; font-size: 18px; }
+.ranking-nombre { color: white; font-size: 15px; }
+.ranking-saldo { color: var(--celeste); font-size: 14px; }
+
+/* REGISTRO */
+.registro-form { background: var(--gris); border-radius: 12px; padding: 16px; margin-bottom: 16px; }
+.registro-label { font-size: 12px; font-weight: 600; color: var(--gris-dark); margin-bottom: 4px; display: block; }
+.registro-input { width: 100%; padding: 10px 12px; border: 2px solid var(--gris-med); border-radius: 8px; font-size: 14px; margin-bottom: 10px; outline: none; }
+.registro-input:focus { border-color: var(--azul-claro); }
+
+/* QUIEBRA */
+.quiebra-card { background: #fff5f5; border: 2px solid var(--rojo); border-radius: 12px; padding: 16px; margin-bottom: 12px; }
+.activo-item { background: white; border: 1px solid var(--gris-med); border-radius: 10px; padding: 12px; margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center; }
+
+/* RESPONSIVE */
+@media (max-width: 480px) {
+  .logo-vida { font-size: 52px; }
+  .logo-argentina { font-size: 26px; letter-spacing: 4px; }
+}
+
+/* SALA ESPERA */
+.espera-jugadores { display: flex; flex-direction: column; gap: 8px; margin: 16px 0; }
+.espera-jugador { background: var(--gris); border-radius: 10px; padding: 12px 16px; display: flex; align-items: center; gap: 12px; }
+.espera-status { width: 10px; height: 10px; border-radius: 50%; }
+.status-listo { background: var(--verde); }
+.status-esperando { background: var(--gris-dark); }
+</style>
+</head>
+<body>
+
+<!-- ==================== PANTALLA INICIO ==================== -->
+<div id="pantalla-inicio" class="screen active">
+  <div class="logo-container">
+    <div class="logo-vida">VIDA</div>
+    <div class="logo-argentina">ARGENTINA</div>
+    <div class="logo-sub">EL JUEGO DE LA VIDA ECONÓMICA</div>
+  </div>
+  <div class="inicio-btns">
+    <button class="btn btn-primary" onclick="irAJugadores()">👥 Jugar Local — Gratis</button>
+    <button class="btn btn-secondary" style="color:white;border-color:rgba(255,255,255,0.4);" onclick="irASala()">🌐 Crear / Unirse a Sala</button>
+    <button class="btn" style="background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.8);margin-top:4px;" onclick="abrirCafecito()">❤️ Apoyar el Proyecto</button>
+  </div>
+  <div class="inicio-reglas">
+    <h3>¿CÓMO SE JUEGA?</h3>
+    <li>🎓 Elegí tu provincia, ciudad y carrera</li>
+    <li>💰 Arrancás con $600.000 y sueldo mensual</li>
+    <li>🎲 Cada turno tirás el dado y enfrentás eventos</li>
+    <li>📈 Invertí en empresas, acciones y propiedades</li>
+    <li>🏆 Gana quien llegue a $1.000.000.000</li>
+  </div>
+  <div style="color:rgba(255,255,255,0.3);font-size:12px;margin-top:20px;">📱 @jm_administracion</div>
+</div>
+
+<!-- ==================== PANTALLA SALA ONLINE ==================== -->
+<div id="pantalla-sala" class="screen">
+  <div class="sala-card">
+    <button class="back-btn" onclick="mostrarPantalla('pantalla-inicio')">← Volver</button>
+    <div class="sala-titulo">SALA ONLINE</div>
+    <div class="sala-sub">Jugá con amigos desde cualquier dispositivo</div>
+    <div class="sala-tab">
+      <button class="sala-tab-btn active" onclick="cambiarTab('crear')">Crear sala</button>
+      <button class="sala-tab-btn" onclick="cambiarTab('unirse')">Unirse</button>
+    </div>
+    <div id="tab-crear" class="sala-content active">
+      <p style="font-size:14px;color:var(--gris-dark);margin-bottom:16px;">Creá una sala y compartí el código con tus amigos (2 a 7 jugadores)</p>
+      <input class="sala-input" id="sala-nombre-host" placeholder="Tu nombre..." maxlength="15">
+      <select class="sala-input" id="sala-avatar-host">
+        <option value="👨‍💼">👨‍💼 Ejecutivo</option>
+        <option value="👩‍💼">👩‍💼 Ejecutiva</option>
+        <option value="👨‍🔧">👨‍🔧 Técnico</option>
+        <option value="👩‍🔬">👩‍🔬 Científica</option>
+        <option value="👨‍🌾">👨‍🌾 Agricultor</option>
+        <option value="👩‍🎨">👩‍🎨 Artista</option>
+        <option value="🧑‍💻">🧑‍💻 Programador</option>
+      </select>
+      <button class="btn btn-primary" onclick="crearSala()">Crear sala</button>
+      <div id="sala-creada" style="display:none;margin-top:16px;">
+        <div class="codigo-display">
+          <div class="codigo-num" id="codigo-sala-display">------</div>
+          <div class="codigo-label">Compartí este código con tus amigos</div>
+        </div>
+        <div class="espera-jugadores" id="espera-jugadores-lista"></div>
+        <button class="btn btn-verde" id="btn-iniciar-sala" onclick="iniciarSalaOnline()" disabled style="opacity:0.5;">Iniciar partida</button>
+        <p style="font-size:12px;color:var(--gris-dark);text-align:center;margin-top:8px;">Mínimo 2 jugadores para iniciar</p>
+      </div>
+    </div>
+    <div id="tab-unirse" class="sala-content">
+      <p style="font-size:14px;color:var(--gris-dark);margin-bottom:16px;">Ingresá el código que te mandó el anfitrión</p>
+      <input class="sala-input" id="codigo-ingresado" placeholder="Código de sala (6 caracteres)..." maxlength="6" style="text-transform:uppercase;letter-spacing:4px;font-family:monospace;font-size:20px;text-align:center;">
+      <input class="sala-input" id="sala-nombre-guest" placeholder="Tu nombre..." maxlength="15">
+      <select class="sala-input" id="sala-avatar-guest">
+        <option value="👨‍💼">👨‍💼 Ejecutivo</option>
+        <option value="👩‍💼">👩‍💼 Ejecutiva</option>
+        <option value="👨‍🔧">👨‍🔧 Técnico</option>
+        <option value="👩‍🔬">👩‍🔬 Científica</option>
+        <option value="👨‍🌾">👨‍🌾 Agricultor</option>
+        <option value="👩‍🎨">👩‍🎨 Artista</option>
+        <option value="🧑‍💻">🧑‍💻 Programador</option>
+      </select>
+      <button class="btn btn-primary" onclick="unirseSala()">Unirse a sala</button>
+      <div id="sala-unido" style="display:none;margin-top:16px;">
+        <div style="background:var(--gris);border-radius:12px;padding:16px;text-align:center;">
+          <div style="font-size:32px;margin-bottom:8px;">⏳</div>
+          <div style="font-weight:700;color:var(--azul);">Esperando al anfitrión...</div>
+          <div style="font-size:13px;color:var(--gris-dark);margin-top:4px;">La partida comenzará en breve</div>
+        </div>
+        <div class="espera-jugadores" id="espera-jugadores-lista-guest"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== CONFIGURAR JUGADORES ==================== -->
+<div id="pantalla-jugadores" class="screen">
+  <div style="max-width:500px;width:100%;">
+    <button class="back-btn" onclick="mostrarPantalla('pantalla-inicio')">← Volver</button>
+    <div class="jugadores-titulo">JUGADORES</div>
+    <div class="jugadores-sub">Configurá los jugadores de la partida</div>
+    <div class="contador-jugadores">
+      <button class="contador-btn" onclick="cambiarJugadores(-1)">−</button>
+      <div class="contador-num" id="num-jugadores">2</div>
+      <button class="contador-btn" onclick="cambiarJugadores(1)">+</button>
+    </div>
+    <div id="jugadores-lista"></div>
+    <button class="btn btn-primary" onclick="irASetup()">Continuar →</button>
+  </div>
+</div>
+
+<!-- ==================== SETUP POR JUGADOR ==================== -->
+<div id="pantalla-setup" class="screen">
+  <div style="max-width:500px;width:100%;">
+    <div class="setup-header">
+      <div class="setup-avatar" id="setup-avatar">👨‍💼</div>
+      <div class="setup-nombre" id="setup-nombre">Jugador</div>
+      <div class="setup-paso" id="setup-paso">Elegí dónde vas a vivir</div>
+      <div class="setup-progress" id="setup-progress"></div>
+    </div>
+    <div id="setup-contenido"></div>
+  </div>
+</div>
+
+<!-- ==================== TABLERO DE JUEGO ==================== -->
+<div id="pantalla-juego" class="screen">
+  <div class="juego-header" id="jugadores-hud"></div>
+  <div class="juego-main">
+    <div class="turno-info">
+      <div class="turno-jugador">
+        <span id="turno-avatar">👨‍💼</span>
+        <span id="turno-nombre">Jugador</span>
+      </div>
+      <div class="turno-ronda" id="turno-info-sub">Ronda 1 • Edad: 18 años</div>
+    </div>
+    <div class="dado-container">
+      <div class="dado" id="dado-display" onclick="tirarDado()">⚀</div>
+    </div>
+    <button class="btn btn-primary" id="btn-tirar" onclick="tirarDado()" style="max-width:280px;">🎲 Tirar Dado</button>
+    <button class="btn btn-secondary" id="btn-siguiente" onclick="siguienteTurno()" style="max-width:280px;display:none;">Siguiente turno →</button>
+  </div>
+  <div class="juego-footer">
+    <button class="footer-btn" onclick="abrirEmpresas()"><span class="icon">🏢</span>Empresas</button>
+    <button class="footer-btn" onclick="abrirInversiones()"><span class="icon">📈</span>Inversiones</button>
+    <button class="footer-btn" onclick="abrirPrestamos()"><span class="icon">🏦</span>Préstamos</button>
+    <button class="footer-btn" onclick="abrirPropiedades()"><span class="icon">🏠</span>Propiedades</button>
+    <button class="footer-btn" onclick="abrirFinanzas()"><span class="icon">💰</span>Finanzas</button>
+  </div>
+</div>
+
+<!-- ==================== PANTALLA VICTORIA ==================== -->
+<div id="pantalla-victoria" class="screen">
+  <div class="victoria-emoji">🏆</div>
+  <div class="victoria-titulo">¡GANASTE!</div>
+  <div class="victoria-nombre" id="victoria-nombre"></div>
+  <div class="victoria-saldo" id="victoria-saldo"></div>
+  <div id="ranking-final" style="width:100%;max-width:400px;margin-bottom:32px;"></div>
+  <button class="btn btn-amarillo" onclick="reiniciarJuego()" style="max-width:300px;">🔄 Jugar de nuevo</button>
+</div>
+
+<!-- ==================== MODALES ==================== -->
+<!-- Modal Evento -->
+<div id="modal-evento" class="modal-overlay" style="display:none;" onclick="cerrarModal('modal-evento')">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div id="evento-contenido"></div>
+    <button class="btn btn-primary" onclick="cerrarModalEvento()">Continuar</button>
+  </div>
+</div>
+
+<!-- Modal Préstamos -->
+<div id="modal-prestamos" class="modal-overlay" style="display:none;" onclick="cerrarModal('modal-prestamos')">
+  <div class="modal" onclick="event.stopPropagation()">
+    <button class="modal-close" onclick="cerrarModal('modal-prestamos')">×</button>
+    <div class="modal-titulo">🏦 Préstamos</div>
+    <div id="prestamos-contenido"></div>
+  </div>
+</div>
+
+<!-- Modal Inversiones -->
+<div id="modal-inversiones" class="modal-overlay" style="display:none;" onclick="cerrarModal('modal-inversiones')">
+  <div class="modal" onclick="event.stopPropagation()">
+    <button class="modal-close" onclick="cerrarModal('modal-inversiones')">×</button>
+    <div class="modal-titulo">📈 Inversiones en Acciones</div>
+    <div id="inversiones-contenido"></div>
+  </div>
+</div>
+
+<!-- Modal Empresas -->
+<div id="modal-empresas" class="modal-overlay" style="display:none;" onclick="cerrarModal('modal-empresas')">
+  <div class="modal" onclick="event.stopPropagation()">
+    <button class="modal-close" onclick="cerrarModal('modal-empresas')">×</button>
+    <div class="modal-titulo">🏢 Empresas</div>
+    <div id="empresas-contenido"></div>
+  </div>
+</div>
+
+<!-- Modal Propiedades -->
+<div id="modal-propiedades" class="modal-overlay" style="display:none;" onclick="cerrarModal('modal-propiedades')">
+  <div class="modal" onclick="event.stopPropagation()">
+    <button class="modal-close" onclick="cerrarModal('modal-propiedades')">×</button>
+    <div class="modal-titulo">🏠 Propiedades</div>
+    <div id="propiedades-contenido"></div>
+  </div>
+</div>
+
+<!-- Modal Finanzas -->
+<div id="modal-finanzas" class="modal-overlay" style="display:none;" onclick="cerrarModal('modal-finanzas')">
+  <div class="modal" onclick="event.stopPropagation()">
+    <button class="modal-close" onclick="cerrarModal('modal-finanzas')">×</button>
+    <div class="modal-titulo">💰 Estado Financiero</div>
+    <div id="finanzas-contenido"></div>
+  </div>
+</div>
+
+<!-- Modal Quiebra -->
+<div id="modal-quiebra" class="modal-overlay center" style="display:none;">
+  <div class="modal center" onclick="event.stopPropagation()">
+    <div style="text-align:center;margin-bottom:16px;">
+      <div style="font-size:48px;">💸</div>
+      <div class="modal-titulo" style="text-align:center;">¡Estás en quiebra!</div>
+      <div style="font-size:14px;color:var(--gris-dark);">Vendé activos para recuperarte</div>
+    </div>
+    <div id="quiebra-contenido"></div>
+  </div>
+</div>
+
+<!-- Modal Registro -->
+<div id="modal-registro" class="modal-overlay center" style="display:none;">
+  <div class="modal center" onclick="event.stopPropagation()">
+    <div style="text-align:center;margin-bottom:16px;">
+      <div style="font-size:40px;">🏆</div>
+      <div class="modal-titulo" style="text-align:center;">Registrá tu partida</div>
+      <div style="font-size:13px;color:var(--gris-dark);">Opcional — aparecé en el ranking global</div>
+    </div>
+    <div class="registro-form">
+      <label class="registro-label">Nombre</label>
+      <input class="registro-input" id="reg-nombre" placeholder="Tu nombre completo...">
+      <label class="registro-label">Email</label>
+      <input class="registro-input" id="reg-email" placeholder="tu@email.com" type="email">
+    </div>
+    <button class="btn btn-primary" onclick="guardarRegistro()" style="margin-bottom:8px;">Registrarme en el ranking</button>
+    <button class="btn" style="background:var(--gris);color:var(--gris-dark);" onclick="saltarRegistro()">Jugar sin registrarme</button>
+  </div>
+</div>
+
+<script>
+// ==================== DATOS DEL JUEGO ====================
+const PROVINCIAS = [
+  { nombre: "Buenos Aires", ciudades: [
+    { nombre: "CABA", bonusSueldo: 0.20, costoVida: 2.0 },
+    { nombre: "La Plata", bonusSueldo: 0.10, costoVida: 1.5 },
+    { nombre: "Azul", bonusSueldo: 0, costoVida: 1.0 },
+    { nombre: "Mar del Plata", bonusSueldo: 0.08, costoVida: 1.4 }
+  ]},
+  { nombre: "Córdoba", ciudades: [{ nombre: "Córdoba Capital", bonusSueldo: 0.12, costoVida: 1.6 }]},
+  { nombre: "Mendoza", ciudades: [{ nombre: "Mendoza", bonusSueldo: 0.08, costoVida: 1.4 }]},
+  { nombre: "Santa Fe", ciudades: [{ nombre: "Rosario", bonusSueldo: 0.10, costoVida: 1.5 }]},
+  { nombre: "Tucumán", ciudades: [{ nombre: "San Miguel", bonusSueldo: 0.02, costoVida: 1.1 }]},
+  { nombre: "Chubut", ciudades: [{ nombre: "Comodoro Rivadavia", bonusSueldo: 0.25, costoVida: 1.8 }]},
+  { nombre: "Tierra del Fuego", ciudades: [{ nombre: "Ushuaia", bonusSueldo: 0.30, costoVida: 2.2 }]},
+  { nombre: "Salta", ciudades: [{ nombre: "Salta Capital", bonusSueldo: 0.01, costoVida: 1.0 }]},
+  { nombre: "Entre Ríos", ciudades: [{ nombre: "Paraná", bonusSueldo: 0.04, costoVida: 1.1 }]},
+  { nombre: "Neuquén", ciudades: [{ nombre: "Neuquén Capital", bonusSueldo: 0.20, costoVida: 1.7 }]}
+];
+
+const CARRERAS = [
+  { nombre: "Contador Público", emoji: "📊", duracion: 5, sueldo: 340000, costo: 0, descripcion: "Bonus +3% estudio contable propio" },
+  { nombre: "Medicina", emoji: "🩺", duracion: 6, sueldo: 420000, costo: 0, descripcion: "Alta demanda laboral" },
+  { nombre: "Ingeniería Industrial", emoji: "⚙️", duracion: 5, sueldo: 390000, costo: 0, descripcion: "Versatilidad laboral" },
+  { nombre: "Sistemas / Programación", emoji: "💻", duracion: 3, sueldo: 580000, costo: 60000, descripcion: "Puede cobrar en USD" },
+  { nombre: "Administración de Empresas", emoji: "📋", duracion: 4, sueldo: 290000, costo: 50000, descripcion: "Gestión empresarial" },
+  { nombre: "Derecho", emoji: "⚖️", duracion: 5, sueldo: 310000, costo: 0, descripcion: "Puede litigar" },
+  { nombre: "Gastronomía / Oficio", emoji: "👨‍🍳", duracion: 2, sueldo: 220000, costo: 60000, descripcion: "Puede emprender rápido" },
+  { nombre: "Sin estudio", emoji: "🏗️", duracion: 0, sueldo: 150000, costo: 0, descripcion: "Arrancar a trabajar ya" }
+];
+
+const EVENTOS = [
+  // POSITIVOS
+  { emoji: "💸", titulo: "Bono de fin de año", desc: "Tu empresa pagó bono extraordinario. ¡Un regalo en pesos!", impacto: (s) => Math.round(s * 0.15), tipo: "pos" },
+  { emoji: "📈", titulo: "Tus acciones subieron", desc: "El mercado estuvo favorable. Las acciones que tenías valorizaron.", impacto: (s) => 80000, tipo: "pos" },
+  { emoji: "🎁", titulo: "Herencia inesperada", desc: "Un familiar lejano te dejó algo de plata. ¡Viva la familia!", impacto: (s) => 200000, tipo: "pos" },
+  { emoji: "💼", titulo: "Oferta de trabajo mejor", desc: "Te ofrecieron un puesto mejor pagado. Aceptaste sin dudarlo.", impacto: (s) => Math.round(s * 0.10), tipo: "pos" },
+  { emoji: "🏆", titulo: "Premio por desempeño", desc: "Tu jefe reconoció tu trabajo. Aumentaste el sueldo del mes.", impacto: (s) => 60000, tipo: "pos" },
+  { emoji: "🌟", titulo: "Freelance exitoso", desc: "Hiciste un trabajo extra y cobaste bien. Las changas rinden.", impacto: (s) => 120000, tipo: "pos" },
+  { emoji: "🏘️", titulo: "Alquiler subió", desc: "Tu propiedad vale más. Ajustaste el alquiler y cobrás más.", impacto: (s) => 90000, tipo: "pos" },
+  { emoji: "💰", titulo: "Inversión de plazo fijo", desc: "Tu plazo fijo venció con buena tasa. La inflación te ayudó.", impacto: (s) => 100000, tipo: "pos" },
+  { emoji: "🎰", titulo: "Premio de la quiniela", desc: "¡Pegaste un número! La suerte estuvo de tu lado hoy.", impacto: (s) => 150000, tipo: "pos" },
+  { emoji: "🤝", titulo: "Sociedad rentable", desc: "Un negocio que armaste con un amigo dio frutos este mes.", impacto: (s) => 180000, tipo: "pos" },
+  { emoji: "📱", titulo: "Venta en MercadoLibre", desc: "Liquidaste cosas en desuso y generaste buena plata.", impacto: (s) => 50000, tipo: "pos" },
+  { emoji: "🏗️", titulo: "Obra pública cerca", desc: "El gobierno hizo una obra y tu zona valorizó.", impacto: (s) => 70000, tipo: "pos" },
+  { emoji: "💡", titulo: "Idea de negocio exitosa", desc: "Implementaste una idea pequeña que generó ingresos extras.", impacto: (s) => 130000, tipo: "pos" },
+  { emoji: "🌍", titulo: "Cobro en dólares", desc: "Un cliente extranjero te pagó. Al tipo de cambio, te fue bien.", impacto: (s) => 200000, tipo: "pos" },
+  { emoji: "🎓", titulo: "Beca obtenida", desc: "Ganaste una beca que cubre tus gastos de estudio este mes.", impacto: (s) => 80000, tipo: "pos" },
+  // NEGATIVOS
+  { emoji: "💥", titulo: "Devaluación del peso", desc: "El gobierno devaluó. Tus pesos perdieron poder adquisitivo.", impacto: (s) => -Math.round(s * 0.12), tipo: "neg" },
+  { emoji: "🚨", titulo: "Multa de AFIP", desc: "Te llegó una intimación de AFIP. Facturaste de más sin declarar.", impacto: (s) => -150000, tipo: "neg" },
+  { emoji: "🏥", titulo: "Gasto médico imprevisto", desc: "Una enfermedad o accidente te generó gastos médicos.", impacto: (s) => -200000, tipo: "neg" },
+  { emoji: "🚗", titulo: "Choque de auto", desc: "Tuviste un accidente. El seguro no cubrió todo.", impacto: (s) => -180000, tipo: "neg" },
+  { emoji: "🔥", titulo: "Robo en casa", desc: "Te robaron. Perdiste cosas de valor y pagaste el arreglo.", impacto: (s) => -250000, tipo: "neg" },
+  { emoji: "📉", titulo: "Crisis política", desc: "La inestabilidad política afectó tu negocio o inversiones.", impacto: (s) => -Math.round(s * 0.08), tipo: "neg" },
+  { emoji: "🌡️", titulo: "Inflación récord", desc: "Los precios subieron más que tu sueldo. Tu poder de compra cayó.", impacto: (s) => -Math.round(s * 0.10), tipo: "neg" },
+  { emoji: "🏦", titulo: "Cepo cambiario", desc: "El gobierno restringió el acceso al dólar. Perdiste en el blue.", impacto: (s) => -100000, tipo: "neg" },
+  { emoji: "⚡", titulo: "Tarifazo de servicios", desc: "Subieron luz, gas y agua. Tus gastos fijos pegaron el salto.", impacto: (s) => -80000, tipo: "neg" },
+  { emoji: "🏚️", titulo: "Alquiler aumentó", desc: "Tu propietario aplicó el ajuste por inflación. Pagás más.", impacto: (s) => -90000, tipo: "neg" },
+  { emoji: "📊", titulo: "Huelga en tu sector", desc: "Hubo un paro. No cobraste completo este mes.", impacto: (s) => -Math.round(s * 0.15), tipo: "neg" },
+  { emoji: "🌊", titulo: "Inundación", desc: "Tu zona sufrió inundaciones. Gastos de reparación y pérdidas.", impacto: (s) => -220000, tipo: "neg" },
+  { emoji: "💳", titulo: "Deuda de tarjeta", desc: "Las cuotas se acumularon. Este mes pagás más de lo esperado.", impacto: (s) => -120000, tipo: "neg" },
+  { emoji: "🏢", titulo: "Despido", desc: "Te echaron del trabajo. Cobrás indemnización pero perdés ingreso.", impacto: (s) => -Math.round(s * 0.20), tipo: "neg" },
+  { emoji: "🦠", titulo: "Pandemia / Cuarentena", desc: "Restricciones afectaron tu actividad. Ingresos reducidos.", impacto: (s) => -Math.round(s * 0.18), tipo: "neg" },
+  { emoji: "📰", titulo: "Corralito bancario", desc: "El banco frenó los retiros. No podés acceder a tu plata.", impacto: (s) => -Math.round(s * 0.25), tipo: "neg" }
+];
+
+const ACCIONES = [
+  { nombre: "YPF", emoji: "⛽", precio: 150000, retorno: 0.08, volatilidad: 0.15 },
+  { nombre: "Banco Galicia", emoji: "🏦", precio: 120000, retorno: 0.07, volatilidad: 0.12 },
+  { nombre: "Mercado Libre", emoji: "🛒", precio: 400000, retorno: 0.12, volatilidad: 0.20 },
+  { nombre: "Grupo Clarín", emoji: "📰", precio: 80000, retorno: 0.05, volatilidad: 0.10 },
+  { nombre: "Loma Negra", emoji: "🏗️", precio: 100000, retorno: 0.06, volatilidad: 0.11 },
+  { nombre: "Pampa Energía", emoji: "⚡", precio: 180000, retorno: 0.09, volatilidad: 0.16 }
+];
+
+const EMPRESAS = [
+  { nombre: "Kiosco", emoji: "🏪", precio: 500000, retornoPorTurno: 40000, descripcion: "Negocio simple y estable" },
+  { nombre: "Panadería", emoji: "🥐", precio: 800000, retornoPorTurno: 65000, descripcion: "Demanda constante" },
+  { nombre: "Consultora", emoji: "💼", precio: 1200000, retornoPorTurno: 100000, descripcion: "Clientes corporativos" },
+  { nombre: "Farmacia", emoji: "💊", precio: 2000000, retornoPorTurno: 160000, descripcion: "Alta rentabilidad" },
+  { nombre: "Franquicia de comida", emoji: "🍔", precio: 3500000, retornoPorTurno: 280000, descripcion: "Marca reconocida" },
+  { nombre: "Empresa de tecnología", emoji: "💻", precio: 6000000, retornoPorTurno: 500000, descripcion: "Alto crecimiento" }
+];
+
+const PROPIEDADES = [
+  { nombre: "Departamento 1 amb.", emoji: "🏠", precio: 2000000, alquilerPorTurno: 80000, descripcion: "Centro de ciudad" },
+  { nombre: "Casa en barrio", emoji: "🏡", precio: 3500000, alquilerPorTurno: 130000, descripcion: "Tranquila y amplia" },
+  { nombre: "Local comercial", emoji: "🏪", precio: 5000000, alquilerPorTurno: 200000, descripcion: "Zona de alto tráfico" },
+  { nombre: "PH con jardín", emoji: "🏘️", precio: 7000000, alquilerPorTurno: 280000, descripcion: "Lujo accesible" },
+  { nombre: "Edificio de departamentos", emoji: "🏢", precio: 20000000, alquilerPorTurno: 800000, descripcion: "Inversión grande" }
+];
+
+const BANCOS = [
+  { nombre: "Banco Nación", emoji: "🏛️", tasa: 0.045, maximo: 5000000, cuotas: [6, 12, 24] },
+  { nombre: "Banco Provincia", emoji: "🏦", tasa: 0.05, maximo: 3000000, cuotas: [6, 12, 18] },
+  { nombre: "Mercado Pago", emoji: "📱", tasa: 0.075, maximo: 800000, cuotas: [3, 6, 12] }
+];
+
+const CARAS_DADO = ["⚀", "⚁", "⚂", "⚃", "⚄", "⚅"];
+const META_VICTORIA = 1000000000;
+
+// ==================== ESTADO DEL JUEGO ====================
+let estado = {
+  jugadores: [],
+  jugadorActual: 0,
+  ronda: 1,
+  fase: "inicio",
+  setupJugadorIdx: 0,
+  setupPaso: 0,
+  provinciaSeleccionada: null,
+  numJugadores: 2,
+  codigoSala: null,
+  modoOnline: false
+};
+
+// ==================== UTILIDADES ====================
+function fmt(n) {
+  return "$" + Math.round(n).toLocaleString("es-AR");
+}
+
+function generarCodigo() {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  return Array.from({length: 6}, () => chars[Math.floor(Math.random() * chars.length)]).join("");
+}
+
+function mostrarPantalla(id) {
+  document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
+  document.getElementById(id).classList.add("active");
+}
+
+function cerrarModal(id) {
+  document.getElementById(id).style.display = "none";
+}
+
+function abrirCafecito() {
+  alert("¡Gracias por apoyar! Próximamente link de donación disponible.\n\nInstagram: @jm_administracion");
+}
+
+// ==================== SALA ONLINE ====================
+function irASala() {
+  mostrarPantalla("pantalla-sala");
+}
+
+function cambiarTab(tab) {
+  document.querySelectorAll(".sala-tab-btn").forEach((b, i) => {
+    b.classList.toggle("active", (tab === "crear" && i === 0) || (tab === "unirse" && i === 1));
+  });
+  document.getElementById("tab-crear").classList.toggle("active", tab === "crear");
+  document.getElementById("tab-unirse").classList.toggle("active", tab === "unirse");
+}
+
+let salaJugadores = [];
+let intervalSala = null;
+
+function crearSala() {
+  const nombre = document.getElementById("sala-nombre-host").value.trim();
+  if (!nombre) { alert("Ingresá tu nombre"); return; }
+  const avatar = document.getElementById("sala-avatar-host").value;
+  const codigo = generarCodigo();
+  estado.codigoSala = codigo;
+  estado.modoOnline = true;
+  salaJugadores = [{ nombre, avatar, listo: true, esHost: true }];
+  document.getElementById("codigo-sala-display").textContent = codigo;
+  document.getElementById("sala-creada").style.display = "block";
+  actualizarEsperaJugadores();
+  // Simular que se pueden unir (en prod necesitaría backend real)
+  intervalSala = setInterval(() => {
+    actualizarBtnIniciar();
+  }, 500);
+}
+
+function actualizarEsperaJugadores() {
+  const lista = document.getElementById("espera-jugadores-lista");
+  lista.innerHTML = salaJugadores.map((j, i) =>
+    `<div class="espera-jugador">
+      <div class="espera-status status-listo"></div>
+      <span style="font-size:24px;">${j.avatar}</span>
+      <span style="font-weight:600;">${j.nombre}</span>
+      ${j.esHost ? '<span style="font-size:11px;background:#cce5ff;color:#004085;padding:2px 8px;border-radius:6px;margin-left:auto;">Anfitrión</span>' : ''}
+    </div>`
+  ).join("");
+}
+
+function actualizarBtnIniciar() {
+  const btn = document.getElementById("btn-iniciar-sala");
+  if (salaJugadores.length >= 2) {
+    btn.disabled = false;
+    btn.style.opacity = "1";
+  }
+}
+
+function unirseSala() {
+  const codigo = document.getElementById("codigo-ingresado").value.trim().toUpperCase();
+  const nombre = document.getElementById("sala-nombre-guest").value.trim();
+  if (!codigo || codigo.length !== 6) { alert("Ingresá el código de 6 caracteres"); return; }
+  if (!nombre) { alert("Ingresá tu nombre"); return; }
+  if (!estado.codigoSala || codigo !== estado.codigoSala) {
+    alert("Código de sala no encontrado. Pedile al anfitrión el código correcto.");
+    return;
+  }
+  const avatar = document.getElementById("sala-avatar-guest").value;
+  salaJugadores.push({ nombre, avatar, listo: true, esHost: false });
+  actualizarEsperaJugadores();
+  actualizarBtnIniciar();
+  document.getElementById("sala-unido").style.display = "block";
+  const listaGuest = document.getElementById("espera-jugadores-lista-guest");
+  listaGuest.innerHTML = `<div class="espera-jugador"><div class="espera-status status-listo"></div><span style="font-size:24px;">${avatar}</span><span style="font-weight:600;">${nombre} (vos)</span></div>`;
+  alert(`¡Te uniste a la sala! Esperá que el anfitrión inicie la partida.\n\nJugadores en sala: ${salaJugadores.length}`);
+}
+
+function iniciarSalaOnline() {
+  if (intervalSala) clearInterval(intervalSala);
+  estado.jugadores = salaJugadores.map(j => crearJugadorBase(j.nombre, j.avatar));
+  // Ir directo al setup para configurar carrera/ciudad
+  estado.numJugadores = salaJugadores.length;
+  estado.setupJugadorIdx = 0;
+  estado.setupPaso = 0;
+  iniciarSetup();
+}
+
+// ==================== CONFIGURAR JUGADORES LOCAL ====================
+function irAJugadores() {
+  mostrarPantalla("pantalla-jugadores");
+  renderizarJugadoresConfig();
+}
+
+function cambiarJugadores(delta) {
+  estado.numJugadores = Math.max(2, Math.min(7, estado.numJugadores + delta));
+  document.getElementById("num-jugadores").textContent = estado.numJugadores;
+  renderizarJugadoresConfig();
+}
+
+const AVATARES = ["👨‍💼", "👩‍💼", "👨‍🔧", "👩‍🔬", "👨‍🌾", "👩‍🎨", "🧑‍💻", "👨‍🍳"];
+
+function renderizarJugadoresConfig() {
+  const lista = document.getElementById("jugadores-lista");
+  lista.innerHTML = "";
+  for (let i = 0; i < estado.numJugadores; i++) {
+    const j = document.createElement("div");
+    j.className = "jugador-card";
+    j.innerHTML = `
+      <div style="flex:1;">
+        <div class="jugador-num">Jugador ${i + 1}</div>
+        <div class="avatares" id="avatares-${i}">
+          ${AVATARES.map((a, ai) => `<span class="avatar-opt ${ai===i%AVATARES.length?'selected':''}" onclick="selectAvatar(${i},${ai})">${a}</span>`).join("")}
+        </div>
+      </div>
+      <input class="nombre-input" id="nombre-j${i}" placeholder="Nombre..." maxlength="12" value="Jugador ${i+1}">
+    `;
+    lista.appendChild(j);
+  }
+}
+
+function selectAvatar(jugIdx, avIdx) {
+  const container = document.getElementById(`avatares-${jugIdx}`);
+  container.querySelectorAll(".avatar-opt").forEach((a, i) => a.classList.toggle("selected", i === avIdx));
+}
+
+function getAvatarSeleccionado(jugIdx) {
+  const container = document.getElementById(`avatares-${jugIdx}`);
+  const selected = container.querySelector(".avatar-opt.selected");
+  return selected ? selected.textContent : AVATARES[jugIdx % AVATARES.length];
+}
+
+function irASetup() {
+  estado.jugadores = [];
+  for (let i = 0; i < estado.numJugadores; i++) {
+    const nombre = document.getElementById(`nombre-j${i}`).value.trim() || `Jugador ${i+1}`;
+    const avatar = getAvatarSeleccionado(i);
+    estado.jugadores.push(crearJugadorBase(nombre, avatar));
+  }
+  estado.setupJugadorIdx = 0;
+  estado.setupPaso = 0;
+  iniciarSetup();
+}
+
+function crearJugadorBase(nombre, avatar) {
+  return {
+    nombre, avatar,
+    saldo: 600000,
+    sueldo: 0,
+    edad: 18,
+    provincia: null,
+    ciudad: null,
+    carrera: null,
+    enCarrera: false,
+    añosCarrera: 0,
+    prestamos: [],
+    acciones: [],
+    empresas: [],
+    propiedades: [],
+    eliminado: false,
+    gastoBase: 0
+  };
+}
+
+// ==================== SETUP POR JUGADOR ====================
+function iniciarSetup() {
+  mostrarPantalla("pantalla-setup");
+  renderizarSetup();
+}
+
+function renderizarSetup() {
+  const j = estado.jugadores[estado.setupJugadorIdx];
+  document.getElementById("setup-avatar").textContent = j.avatar;
+  document.getElementById("setup-nombre").textContent = j.nombre;
+
+  const totalPasos = 2;
+  const progHTML = Array.from({length: totalPasos}, (_, i) =>
+    `<div class="setup-dot ${i <= estado.setupPaso ? "active" : ""}"></div>`
+  ).join("");
+  document.getElementById("setup-progress").innerHTML = progHTML;
+
+  const contenido = document.getElementById("setup-contenido");
+
+  if (estado.setupPaso === 0) {
+    document.getElementById("setup-paso").textContent = "Elegí dónde vas a vivir";
+    if (!estado.provinciaSeleccionada) {
+      contenido.innerHTML = `
+        <p style="font-size:13px;color:var(--gris-dark);margin-bottom:12px;">📍 Provincia</p>
+        ${PROVINCIAS.map((p, i) => `
+          <div class="opcion-card" onclick="seleccionarProvincia(${i})">
+            <div>
+              <div class="opcion-nombre">${p.nombre}</div>
+            </div>
+            <span style="font-size:12px;color:var(--gris-dark);">${p.ciudades.length} ciudad${p.ciudades.length>1?"es":""}</span>
+          </div>
+        `).join("")}
+      `;
+    } else {
+      const prov = PROVINCIAS[estado.provinciaSeleccionada];
+      contenido.innerHTML = `
+        <button class="back-btn" onclick="volverProvincias()">← ${prov.nombre}</button>
+        <p style="font-size:13px;color:var(--azul);font-weight:600;margin-bottom:12px;">Elegí tu ciudad</p>
+        ${prov.ciudades.map((c, i) => `
+          <div class="opcion-card" onclick="seleccionarCiudad(${i})">
+            <div>
+              <div class="opcion-nombre">${c.nombre}</div>
+            </div>
+            <div style="text-align:right;">
+              ${c.bonusSueldo > 0 ? `<span class="opcion-badge badge-verde">+${Math.round(c.bonusSueldo*100)}% sueldo</span>` : ""}
+              <div style="font-size:11px;color:var(--gris-dark);margin-top:2px;">${c.costoVida}x costo</div>
+            </div>
+          </div>
+        `).join("")}
+      `;
+    }
+  } else if (estado.setupPaso === 1) {
+    document.getElementById("setup-paso").textContent = "Elegí tu carrera";
+    const ciudad = PROVINCIAS[estado.provinciaSeleccionada].ciudades[j._ciudadIdx || 0];
+    contenido.innerHTML = `
+      ${CARRERAS.map((c, i) => {
+        const sueldoFinal = Math.round(c.sueldo * (1 + (ciudad ? ciudad.bonusSueldo : 0)));
+        return `
+          <div class="opcion-card" onclick="seleccionarCarrera(${i})">
+            <div style="flex:1;">
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+                <span style="font-size:20px;">${c.emoji}</span>
+                <span class="opcion-nombre">${c.nombre}</span>
+              </div>
+              <div class="opcion-detail">⏱ ${c.duracion > 0 ? c.duracion + " años" : "Ya"} • 💵 ${fmt(sueldoFinal)}/mes</div>
+              <div class="opcion-detail" style="color:#6c757d;">${c.descripcion}</div>
+            </div>
+            ${c.costo > 0 ? `<span class="opcion-badge badge-rojo">Cuota: ${fmt(c.costo)}</span>` : ""}
+          </div>
+        `;
+      }).join("")}
+    `;
+  }
+}
+
+function seleccionarProvincia(idx) {
+  estado.provinciaSeleccionada = idx;
+  renderizarSetup();
+}
+
+function volverProvincias() {
+  estado.provinciaSeleccionada = null;
+  renderizarSetup();
+}
+
+function seleccionarCiudad(idx) {
+  const j = estado.jugadores[estado.setupJugadorIdx];
+  j.provincia = PROVINCIAS[estado.provinciaSeleccionada].nombre;
+  j.ciudad = PROVINCIAS[estado.provinciaSeleccionada].ciudades[idx];
+  j._ciudadIdx = idx;
+  estado.setupPaso = 1;
+  estado.provinciaSeleccionada = null;
+  renderizarSetup();
+}
+
+function seleccionarCarrera(idx) {
+  const j = estado.jugadores[estado.setupJugadorIdx];
+  const carrera = CARRERAS[idx];
+  const bonusSueldo = j.ciudad ? j.ciudad.bonusSueldo : 0;
+  const costoVida = j.ciudad ? j.ciudad.costoVida : 1;
+  j.carrera = carrera;
+  j.sueldo = Math.round(carrera.sueldo * (1 + bonusSueldo));
+  j.gastoBase = Math.round(60000 * costoVida);
+  j.enCarrera = carrera.duracion > 0;
+  j.añosCarrera = 0;
+
+  estado.setupJugadorIdx++;
+  estado.provinciaSeleccionada = null;
+  estado.setupPaso = 0;
+
+  if (estado.setupJugadorIdx >= estado.jugadores.length) {
+    iniciarJuego();
+  } else {
+    renderizarSetup();
+  }
+}
+
+// ==================== JUEGO ====================
+function iniciarJuego() {
+  estado.jugadorActual = 0;
+  estado.ronda = 1;
+  mostrarPantalla("pantalla-juego");
+  actualizarHUD();
+  actualizarTurno();
+}
+
+function actualizarHUD() {
+  const hud = document.getElementById("jugadores-hud");
+  hud.innerHTML = estado.jugadores.map((j, i) => `
+    <div class="jugador-hud ${i === estado.jugadorActual ? "activo" : ""}" onclick="verFinanzas(${i})">
+      <div style="display:flex;align-items:center;gap:6px;">
+        <span class="hud-avatar">${j.avatar}</span>
+        <span class="hud-nombre">${j.nombre}</span>
+      </div>
+      <div class="hud-saldo">${fmt(j.saldo)}</div>
+    </div>
+  `).join("");
+}
+
+function actualizarTurno() {
+  const j = estado.jugadores[estado.jugadorActual];
+  document.getElementById("turno-avatar").textContent = j.avatar;
+  document.getElementById("turno-nombre").textContent = j.nombre;
+  document.getElementById("turno-info-sub").textContent = `Ronda ${estado.ronda} • Edad: ${j.edad} años`;
+  document.getElementById("btn-tirar").style.display = "flex";
+  document.getElementById("btn-siguiente").style.display = "none";
+  document.getElementById("dado-display").textContent = "⚀";
+}
+
+function tirarDado() {
+  const dado = document.getElementById("dado-display");
+  dado.classList.add("girando");
+  document.getElementById("btn-tirar").style.display = "none";
+
+  setTimeout(() => {
+    dado.classList.remove("girando");
+    const resultado = Math.floor(Math.random() * 6) + 1;
+    dado.textContent = CARAS_DADO[resultado - 1];
+    procesarTurno(resultado);
+  }, 600);
+}
+
+function procesarTurno(dado) {
+  const j = estado.jugadores[estado.jugadorActual];
+  j.edad++;
+
+  // Cobrar sueldo si ya terminó carrera o no tiene
+  let ingresado = 0;
+  if (!j.enCarrera) {
+    ingresado += j.sueldo;
+  } else {
+    j.añosCarrera++;
+    if (j.añosCarrera >= j.carrera.duracion) {
+      j.enCarrera = false;
+    }
+    // Cobrar una parte del sueldo mientras estudia
+    ingresado += Math.round(j.sueldo * 0.3);
+  }
+
+  // Retorno de empresas
+  let retornoEmpresa = 0;
+  j.empresas.forEach(e => { retornoEmpresa += e.retornoPorTurno; });
+  ingresado += retornoEmpresa;
+
+  // Alquiler de propiedades
+  let alquiler = 0;
+  j.propiedades.forEach(p => { alquiler += p.alquilerPorTurno; });
+  ingresado += alquiler;
+
+  // Gastos base
+  let gastos = j.gastoBase;
+
+  // Cuotas de préstamos
+  let cuotaTotal = 0;
+  j.prestamos = j.prestamos.filter(p => {
+    if (p.remaining <= 0) return false;
+    const cuota = Math.min(p.cuotaMensual, p.remaining);
+    cuotaTotal += cuota;
+    p.remaining -= cuota;
+    return p.remaining > 0;
+  });
+  gastos += cuotaTotal;
+
+  // Costo de carrera
+  if (j.enCarrera && j.carrera.costo > 0) {
+    gastos += j.carrera.costo;
+  }
+
+  j.saldo += ingresado - gastos;
+
+  // Evento aleatorio (60% probabilidad)
+  if (Math.random() < 0.6) {
+    mostrarEvento(j, dado);
+  } else {
+    verificarQuiebra(j);
+  }
+}
+
+function mostrarEvento(j, dado) {
+  const evento = EVENTOS[Math.floor(Math.random() * EVENTOS.length)];
+  const impacto = evento.impacto(j.saldo);
+  j.saldo += impacto;
+
+  const contenido = document.getElementById("evento-contenido");
+  contenido.innerHTML = `
+    <div class="evento-card">
+      <div class="evento-emoji">${evento.emoji}</div>
+      <div class="evento-titulo">${evento.titulo}</div>
+      <div class="evento-desc">${evento.desc}</div>
+      <div class="evento-impacto ${impacto >= 0 ? "impacto-pos" : "impacto-neg"}">
+        ${impacto >= 0 ? "+" : ""}${fmt(impacto)}
+      </div>
+    </div>
+    <div style="font-size:14px;color:var(--gris-dark);text-align:center;margin-bottom:12px;">
+      Saldo actual: <strong>${fmt(j.saldo)}</strong>
+    </div>
+  `;
+
+  document.getElementById("modal-evento").style.display = "flex";
+}
+
+function cerrarModalEvento() {
+  cerrarModal("modal-evento");
+  const j = estado.jugadores[estado.jugadorActual];
+  verificarQuiebra(j);
+}
+
+function verificarQuiebra(j) {
+  if (j.saldo < 0) {
+    const tieneActivos = j.empresas.length > 0 || j.propiedades.length > 0 || j.acciones.length > 0;
+    if (tieneActivos) {
+      mostrarQuiebra(j);
+      return;
+    } else {
+      j.eliminado = true;
+      alert(`💸 ${j.nombre} quedó en quiebra y fue eliminado del juego.`);
+    }
+  }
+
+  verificarVictoria(j);
+}
+
+function mostrarQuiebra(j) {
+  const contenido = document.getElementById("quiebra-contenido");
+  let html = `<div class="quiebra-card"><strong style="color:var(--rojo);">Saldo: ${fmt(j.saldo)}</strong><br><small>Vendé activos para recuperarte</small></div>`;
+
+  if (j.empresas.length > 0) {
+    html += `<p style="font-weight:600;margin-bottom:8px;">🏢 Tus empresas:</p>`;
+    html += j.empresas.map((e, i) => `
+      <div class="activo-item">
+        <span>${e.emoji} ${e.nombre}</span>
+        <span style="color:var(--verde);font-weight:700;">${fmt(Math.round(e.precio * 0.7))}</span>
+        <button class="btn btn-verde btn-sm" onclick="venderEmpresa(${i})">Vender</button>
+      </div>
+    `).join("");
+  }
+
+  if (j.propiedades.length > 0) {
+    html += `<p style="font-weight:600;margin-bottom:8px;margin-top:12px;">🏠 Tus propiedades:</p>`;
+    html += j.propiedades.map((p, i) => `
+      <div class="activo-item">
+        <span>${p.emoji} ${p.nombre}</span>
+        <span style="color:var(--verde);font-weight:700;">${fmt(Math.round(p.precio * 0.75))}</span>
+        <button class="btn btn-verde btn-sm" onclick="venderPropiedad(${i})">Vender</button>
+      </div>
+    `).join("");
+  }
+
+  if (j.acciones.length > 0) {
+    html += `<p style="font-weight:600;margin-bottom:8px;margin-top:12px;">📈 Tus acciones:</p>`;
+    html += j.acciones.map((a, i) => `
+      <div class="activo-item">
+        <span>${a.emoji} ${a.nombre} x${a.cantidad}</span>
+        <span style="color:var(--verde);font-weight:700;">${fmt(Math.round(a.precio * a.cantidad * 0.9))}</span>
+        <button class="btn btn-verde btn-sm" onclick="venderAcciones(${i})">Vender</button>
+      </div>
+    `).join("");
+  }
+
+  html += `<button class="btn btn-primary" onclick="continuarDespuesQuiebra()" style="margin-top:16px;">Continuar sin vender</button>`;
+  contenido.innerHTML = html;
+  document.getElementById("modal-quiebra").style.display = "flex";
+}
+
+function venderEmpresa(idx) {
+  const j = estado.jugadores[estado.jugadorActual];
+  const empresa = j.empresas[idx];
+  const valor = Math.round(empresa.precio * 0.7);
+  j.saldo += valor;
+  j.empresas.splice(idx, 1);
+  if (j.saldo >= 0) {
+    cerrarModal("modal-quiebra");
+    verificarVictoria(j);
+  } else {
+    mostrarQuiebra(j);
+  }
+}
+
+function venderPropiedad(idx) {
+  const j = estado.jugadores[estado.jugadorActual];
+  const prop = j.propiedades[idx];
+  const valor = Math.round(prop.precio * 0.75);
+  j.saldo += valor;
+  j.propiedades.splice(idx, 1);
+  if (j.saldo >= 0) {
+    cerrarModal("modal-quiebra");
+    verificarVictoria(j);
+  } else {
+    mostrarQuiebra(j);
+  }
+}
+
+function venderAcciones(idx) {
+  const j = estado.jugadores[estado.jugadorActual];
+  const acc = j.acciones[idx];
+  const valor = Math.round(acc.precio * acc.cantidad * 0.9);
+  j.saldo += valor;
+  j.acciones.splice(idx, 1);
+  if (j.saldo >= 0) {
+    cerrarModal("modal-quiebra");
+    verificarVictoria(j);
+  } else {
+    mostrarQuiebra(j);
+  }
+}
+
+function continuarDespuesQuiebra() {
+  cerrarModal("modal-quiebra");
+  const j = estado.jugadores[estado.jugadorActual];
+  if (j.saldo < 0) {
+    j.eliminado = true;
+    alert(`💸 ${j.nombre} quedó en quiebra y fue eliminado del juego.`);
+  }
+  verificarVictoria(j);
+}
+
+function verificarVictoria(j) {
+  const patrimonio = calcularPatrimonio(j);
+  if (patrimonio >= META_VICTORIA) {
+    mostrarVictoria(j);
+    return;
+  }
+
+  const vivos = estado.jugadores.filter(j => !j.eliminado);
+  if (vivos.length === 1) {
+    mostrarVictoria(vivos[0]);
+    return;
+  }
+
+  actualizarHUD();
+  document.getElementById("btn-siguiente").style.display = "flex";
+}
+
+function calcularPatrimonio(j) {
+  let total = j.saldo;
+  j.empresas.forEach(e => total += e.precio);
+  j.propiedades.forEach(p => total += p.precio);
+  j.acciones.forEach(a => total += a.precio * a.cantidad);
+  j.prestamos.forEach(p => total -= p.remaining);
+  return total;
+}
+
+function siguienteTurno() {
+  do {
+    estado.jugadorActual = (estado.jugadorActual + 1) % estado.jugadores.length;
+    if (estado.jugadorActual === 0) estado.ronda++;
+  } while (estado.jugadores[estado.jugadorActual].eliminado);
+
+  actualizarHUD();
+  actualizarTurno();
+}
+
+// ==================== VICTORIA ====================
+function mostrarVictoria(ganador) {
+  document.getElementById("modal-registro").style.display = "flex";
+  document.getElementById("reg-nombre").value = ganador.nombre;
+  estado._ganador = ganador;
+}
+
+function guardarRegistro() {
+  const nombre = document.getElementById("reg-nombre").value;
+  const email = document.getElementById("reg-email").value;
+  // En prod esto iría a una API
+  console.log("Registro:", { nombre, email, partida: new Date().toISOString() });
+  cerrarModal("modal-registro");
+  mostrarPantallaVictoria(estado._ganador);
+}
+
+function saltarRegistro() {
+  cerrarModal("modal-registro");
+  mostrarPantallaVictoria(estado._ganador);
+}
+
+function mostrarPantallaVictoria(ganador) {
+  mostrarPantalla("pantalla-victoria");
+  document.getElementById("victoria-nombre").textContent = `${ganador.avatar} ${ganador.nombre}`;
+  document.getElementById("victoria-saldo").textContent = `Patrimonio: ${fmt(calcularPatrimonio(ganador))}`;
+
+  const ranking = [...estado.jugadores].sort((a, b) => calcularPatrimonio(b) - calcularPatrimonio(a));
+  const posEmojis = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣", "6️⃣", "7️⃣"];
+  document.getElementById("ranking-final").innerHTML = ranking.map((j, i) => `
+    <div class="ranking-item">
+      <span class="ranking-pos">${posEmojis[i]}</span>
+      <span class="ranking-nombre">${j.avatar} ${j.nombre}</span>
+      <span class="ranking-saldo">${fmt(calcularPatrimonio(j))}</span>
+    </div>
+  `).join("");
+}
+
+function reiniciarJuego() {
+  estado = {
+    jugadores: [], jugadorActual: 0, ronda: 1,
+    fase: "inicio", setupJugadorIdx: 0, setupPaso: 0,
+    provinciaSeleccionada: null, numJugadores: 2,
+    codigoSala: null, modoOnline: false
+  };
+  mostrarPantalla("pantalla-inicio");
+}
+
+// ==================== MODALES DE COMPRA ====================
+function abrirPrestamos() {
+  let bancoSeleccionado = null;
+  let cuotasSeleccionadas = null;
+
+  function render() {
+    const j = estado.jugadores[estado.jugadorActual];
+    let html = `<div style="margin-bottom:16px;">`;
+    BANCOS.forEach((b, i) => {
+      html += `<div class="prestamo-opcion ${bancoSeleccionado === i ? 'selected' : ''}" onclick="selectBanco(${i})">
+        <div class="prestamo-nombre">${b.emoji} ${b.nombre}</div>
+        <div class="prestamo-detalle">Tasa ${b.tasa * 100}% • Máximo ${fmt(b.maximo)}</div>
+      </div>`;
+    });
+    html += `</div>`;
+
+    if (bancoSeleccionado !== null) {
+      const banco = BANCOS[bancoSeleccionado];
+      html += `<input type="number" id="monto-prestamo" class="sala-input" placeholder="Monto a pedir..." min="1000" max="${banco.maximo}" oninput="actualizarResumenPrestamo()">`;
+      html += `<div style="display:flex;gap:8px;margin-bottom:12px;">`;
+      banco.cuotas.forEach(c => {
+        html += `<button class="btn ${cuotasSeleccionadas === c ? 'btn-primary' : 'btn-secondary'} btn-sm" onclick="selectCuotas(${c})" style="flex:1;">${c} meses</button>`;
+      });
+      html += `</div>`;
+      html += `<div id="resumen-prestamo"></div>`;
+      html += `<button class="btn btn-verde" onclick="confirmarPrestamo()">Solicitar préstamo</button>`;
+    }
+
+    if (j.prestamos.length > 0) {
+      html += `<div style="margin-top:16px;border-top:1px solid var(--gris-med);padding-top:12px;">
+        <p style="font-weight:600;font-size:14px;margin-bottom:8px;">Deudas actuales:</p>
+        ${j.prestamos.map(p => `
+          <div style="background:var(--gris);border-radius:8px;padding:10px;margin-bottom:6px;font-size:13px;">
+            <strong>${p.banco}</strong> — Restante: ${fmt(p.remaining)} | Cuota: ${fmt(p.cuotaMensual)}/mes
+          </div>
+        `).join("")}
+      </div>`;
+    }
+
+    document.getElementById("prestamos-contenido").innerHTML = html;
+
+    window.selectBanco = (i) => { bancoSeleccionado = i; cuotasSeleccionadas = null; render(); };
+    window.selectCuotas = (c) => { cuotasSeleccionadas = c; render(); actualizarResumenPrestamo(); };
+  }
+
+  window.actualizarResumenPrestamo = () => {
+    if (bancoSeleccionado === null || cuotasSeleccionadas === null) return;
+    const banco = BANCOS[bancoSeleccionado];
+    const montoInput = document.getElementById("monto-prestamo");
+    const monto = parseFloat(montoInput.value) || 0;
+    const cuotas = cuotasSeleccionadas;
+
+    if (monto <= 0 || monto > banco.maximo) {
+      document.getElementById("resumen-prestamo").innerHTML = `<div class="prestamo-resumen" style="background:#f8d7da;border-color:#f5c6cb;">Monto inválido. Máximo: ${fmt(banco.maximo)}</div>`;
+      return;
+    }
+
+    // Cálculo correcto: el interés se cobra sobre el capital total dividido en cuotas
+    const interesTotal = monto * banco.tasa * (cuotas / 12);
+    const totalAPagar = monto + interesTotal;
+    const cuotaMensual = totalAPagar / cuotas;
+
+    document.getElementById("resumen-prestamo").innerHTML = `
+      <div class="prestamo-resumen">
+        <strong>Resumen del préstamo:</strong><br>
+        Monto: ${fmt(monto)}<br>
+        Interés total: ${fmt(interesTotal)}<br>
+        Cuota mensual: ${fmt(cuotaMensual)}<br>
+        Total a pagar: ${fmt(totalAPagar)}
+      </div>
+    `;
+    window._prestamoPendiente = { monto, cuotaMensual, totalAPagar, remaining: totalAPagar, banco: BANCOS[bancoSeleccionado].nombre };
+  };
+
+  window.confirmarPrestamo = () => {
+    if (!window._prestamoPendiente) { alert("Completá todos los campos"); return; }
+    const j = estado.jugadores[estado.jugadorActual];
+    j.saldo += window._prestamoPendiente.monto;
+    j.prestamos.push({ ...window._prestamoPendiente });
+    window._prestamoPendiente = null;
+    cerrarModal("modal-prestamos");
+    actualizarHUD();
+    alert(`✅ Préstamo de ${fmt(j.prestamos[j.prestamos.length-1].monto || 0)} aprobado. El dinero fue acreditado.`);
+  };
+
+  render();
+  document.getElementById("modal-prestamos").style.display = "flex";
+}
+
+function abrirInversiones() {
+  const j = estado.jugadores[estado.jugadorActual];
+  let html = `<p style="font-size:13px;color:var(--gris-dark);margin-bottom:12px;">Comprá acciones de empresas argentinas</p>`;
+
+  ACCIONES.forEach((a, i) => {
+    const tieneAcciones = j.acciones.find(ac => ac.nombre === a.nombre);
+    html += `<div class="mercado-item">
+      <div>
+        <div class="mercado-nombre">${a.emoji} ${a.nombre}</div>
+        <div class="mercado-retorno">+${Math.round(a.retorno * 100)}% retorno/turno</div>
+        ${tieneAcciones ? `<div style="font-size:12px;color:var(--azul);">Tenés: ${tieneAcciones.cantidad} acciones</div>` : ""}
+      </div>
+      <div style="text-align:right;">
+        <div class="mercado-precio">${fmt(a.precio)}</div>
+        <button class="btn btn-primary btn-sm" onclick="comprarAccion(${i})" style="margin-top:4px;">Comprar</button>
+        ${tieneAcciones ? `<button class="btn btn-rojo btn-sm" onclick="venderAccionMercado(${i})" style="margin-top:4px;">Vender</button>` : ""}
+      </div>
+    </div>`;
+  });
+
+  window.comprarAccion = (idx) => {
+    const j = estado.jugadores[estado.jugadorActual];
+    const accion = ACCIONES[idx];
+    if (j.saldo < accion.precio) { alert("No tenés suficiente saldo"); return; }
+    const cantStr = prompt(`¿Cuántas acciones de ${accion.nombre} querés comprar? (Precio: ${fmt(accion.precio)} c/u)\nTenés: ${fmt(j.saldo)}`);
+    const cant = parseInt(cantStr);
+    if (!cant || cant <= 0) return;
+    const total = accion.precio * cant;
+    if (j.saldo < total) { alert(`No tenés saldo suficiente. Necesitás ${fmt(total)}`); return; }
+    j.saldo -= total;
+    const existente = j.acciones.find(a => a.nombre === accion.nombre);
+    if (existente) { existente.cantidad += cant; }
+    else { j.acciones.push({ ...accion, cantidad: cant }); }
+    actualizarHUD();
+    cerrarModal("modal-inversiones");
+    alert(`✅ Compraste ${cant} acciones de ${accion.nombre} por ${fmt(total)}`);
+  };
+
+  window.venderAccionMercado = (idx) => {
+    const j = estado.jugadores[estado.jugadorActual];
+    const accion = ACCIONES[idx];
+    const existente = j.acciones.find(a => a.nombre === accion.nombre);
+    if (!existente) return;
+    const valor = Math.round(accion.precio * existente.cantidad * (0.9 + Math.random() * 0.2));
+    j.saldo += valor;
+    j.acciones = j.acciones.filter(a => a.nombre !== accion.nombre);
+    actualizarHUD();
+    cerrarModal("modal-inversiones");
+    alert(`✅ Vendiste ${existente.cantidad} acciones de ${accion.nombre} por ${fmt(valor)}`);
+  };
+
+  document.getElementById("inversiones-contenido").innerHTML = html;
+  document.getElementById("modal-inversiones").style.display = "flex";
+}
+
+function abrirEmpresas() {
+  const j = estado.jugadores[estado.jugadorActual];
+  let html = `<p style="font-size:13px;color:var(--gris-dark);margin-bottom:12px;">Comprá empresas que generan ingresos cada turno</p>`;
+
+  EMPRESAS.forEach((e, i) => {
+    const tieneEmpresa = j.empresas.find(em => em.nombre === e.nombre);
+    html += `<div class="mercado-item">
+      <div>
+        <div class="mercado-nombre">${e.emoji} ${e.nombre}</div>
+        <div class="mercado-retorno">+${fmt(e.retornoPorTurno)}/turno</div>
+        <div style="font-size:12px;color:var(--gris-dark);">${e.descripcion}</div>
+        ${tieneEmpresa ? '<div style="font-size:12px;color:var(--azul);font-weight:600;">✅ Ya la tenés</div>' : ""}
+      </div>
+      <div style="text-align:right;">
+        <div class="mercado-precio">${fmt(e.precio)}</div>
+        ${!tieneEmpresa ? `<button class="btn btn-primary btn-sm" onclick="comprarEmpresa(${i})" style="margin-top:4px;">Comprar</button>` : `<button class="btn btn-rojo btn-sm" onclick="venderEmpresaMercado(${i})" style="margin-top:4px;">Vender</button>`}
+      </div>
+    </div>`;
+  });
+
+  window.comprarEmpresa = (idx) => {
+    const j = estado.jugadores[estado.jugadorActual];
+    const empresa = EMPRESAS[idx];
+    if (j.saldo < empresa.precio) { alert(`No tenés saldo suficiente. Necesitás ${fmt(empresa.precio)}`); return; }
+    j.saldo -= empresa.precio;
+    j.empresas.push({ ...empresa });
+    actualizarHUD();
+    cerrarModal("modal-empresas");
+    alert(`✅ Compraste ${empresa.emoji} ${empresa.nombre}. Genera ${fmt(empresa.retornoPorTurno)}/turno.`);
+  };
+
+  window.venderEmpresaMercado = (idx) => {
+    const j = estado.jugadores[estado.jugadorActual];
+    const empresa = EMPRESAS[idx];
+    const existente = j.empresas.find(e => e.nombre === empresa.nombre);
+    if (!existente) return;
+    const valor = Math.round(empresa.precio * 0.7);
+    j.saldo += valor;
+    j.empresas = j.empresas.filter(e => e.nombre !== empresa.nombre);
+    actualizarHUD();
+    cerrarModal("modal-empresas");
+    alert(`✅ Vendiste ${empresa.emoji} ${empresa.nombre} por ${fmt(valor)}`);
+  };
+
+  document.getElementById("empresas-contenido").innerHTML = html;
+  document.getElementById("modal-empresas").style.display = "flex";
+}
+
+function abrirPropiedades() {
+  const j = estado.jugadores[estado.jugadorActual];
+  let html = `<p style="font-size:13px;color:var(--gris-dark);margin-bottom:12px;">Comprá propiedades que generan alquiler cada turno</p>`;
+
+  PROPIEDADES.forEach((p, i) => {
+    const tieneProp = j.propiedades.find(pr => pr.nombre === p.nombre);
+    html += `<div class="mercado-item">
+      <div>
+        <div class="mercado-nombre">${p.emoji} ${p.nombre}</div>
+        <div class="mercado-retorno">+${fmt(p.alquilerPorTurno)}/turno alquiler</div>
+        <div style="font-size:12px;color:var(--gris-dark);">${p.descripcion}</div>
+        ${tieneProp ? '<div style="font-size:12px;color:var(--azul);font-weight:600;">✅ Ya la tenés</div>' : ""}
+      </div>
+      <div style="text-align:right;">
+        <div class="mercado-precio">${fmt(p.precio)}</div>
+        ${!tieneProp ? `<button class="btn btn-primary btn-sm" onclick="comprarPropiedad(${i})" style="margin-top:4px;">Comprar</button>` : `<button class="btn btn-rojo btn-sm" onclick="venderPropiedadMercado(${i})" style="margin-top:4px;">Vender</button>`}
+      </div>
+    </div>`;
+  });
+
+  window.comprarPropiedad = (idx) => {
+    const j = estado.jugadores[estado.jugadorActual];
+    const prop = PROPIEDADES[idx];
+    if (j.saldo < prop.precio) { alert(`No tenés saldo suficiente. Necesitás ${fmt(prop.precio)}`); return; }
+    j.saldo -= prop.precio;
+    j.propiedades.push({ ...prop });
+    actualizarHUD();
+    cerrarModal("modal-propiedades");
+    alert(`✅ Compraste ${prop.emoji} ${prop.nombre}. Genera ${fmt(prop.alquilerPorTurno)}/turno de alquiler.`);
+  };
+
+  window.venderPropiedadMercado = (idx) => {
+    const j = estado.jugadores[estado.jugadorActual];
+    const prop = PROPIEDADES[idx];
+    const existente = j.propiedades.find(p => p.nombre === prop.nombre);
+    if (!existente) return;
+    const valor = Math.round(prop.precio * 0.75);
+    j.saldo += valor;
+    j.propiedades = j.propiedades.filter(p => p.nombre !== prop.nombre);
+    actualizarHUD();
+    cerrarModal("modal-propiedades");
+    alert(`✅ Vendiste ${prop.emoji} ${prop.nombre} por ${fmt(valor)}`);
+  };
+
+  document.getElementById("propiedades-contenido").innerHTML = html;
+  document.getElementById("modal-propiedades").style.display = "flex";
+}
+
+function abrirFinanzas() {
+  verFinanzas(estado.jugadorActual);
+}
+
+function verFinanzas(idx) {
+  const j = estado.jugadores[idx];
+  const patrimonio = calcularPatrimonio(j);
+  const progreso = Math.min(100, (patrimonio / META_VICTORIA) * 100);
+
+  let html = `
+    <div style="text-align:center;margin-bottom:20px;">
+      <div style="font-size:40px;">${j.avatar}</div>
+      <div style="font-size:20px;font-weight:800;color:var(--azul);">${j.nombre}</div>
+      <div style="font-size:13px;color:var(--gris-dark);">Edad: ${j.edad} años | ${j.ciudad ? j.ciudad.nombre + ", " : ""}${j.provincia || ""}</div>
+    </div>
+
+    <div style="background:var(--gris);border-radius:12px;padding:16px;margin-bottom:12px;">
+      <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
+        <span style="font-size:13px;color:var(--gris-dark);">Progreso a la victoria</span>
+        <span style="font-size:13px;font-weight:600;">${progreso.toFixed(1)}%</span>
+      </div>
+      <div style="background:var(--gris-med);border-radius:4px;height:8px;">
+        <div style="background:var(--azul);border-radius:4px;height:8px;width:${progreso}%;transition:width 0.3s;"></div>
+      </div>
+      <div style="font-size:11px;color:var(--gris-dark);margin-top:4px;">Meta: ${fmt(META_VICTORIA)}</div>
+    </div>
+
+    <table style="width:100%;font-size:14px;">
+      <tr><td style="padding:6px 0;color:var(--gris-dark);">💵 Saldo efectivo</td><td style="text-align:right;font-weight:700;color:${j.saldo>=0?'var(--verde)':'var(--rojo)'};">${fmt(j.saldo)}</td></tr>
+      <tr><td style="padding:6px 0;color:var(--gris-dark);">📊 Sueldo mensual</td><td style="text-align:right;font-weight:600;">${fmt(j.sueldo)}</td></tr>
+      <tr><td style="padding:6px 0;color:var(--gris-dark);">🏠 Gastos base</td><td style="text-align:right;font-weight:600;color:var(--naranja);">${fmt(j.gastoBase)}</td></tr>
+      <tr><td style="padding:6px 0;color:var(--gris-dark);">🏢 Empresas</td><td style="text-align:right;font-weight:600;">${j.empresas.length} (${fmt(j.empresas.reduce((s,e)=>s+e.precio,0))})</td></tr>
+      <tr><td style="padding:6px 0;color:var(--gris-dark);">🏠 Propiedades</td><td style="text-align:right;font-weight:600;">${j.propiedades.length} (${fmt(j.propiedades.reduce((s,p)=>s+p.precio,0))})</td></tr>
+      <tr><td style="padding:6px 0;color:var(--gris-dark);">📈 Acciones</td><td style="text-align:right;font-weight:600;">${j.acciones.length} tipos</td></tr>
+      <tr><td style="padding:6px 0;color:var(--gris-dark);">🏦 Deudas</td><td style="text-align:right;font-weight:600;color:var(--rojo);">${fmt(j.prestamos.reduce((s,p)=>s+p.remaining,0))}</td></tr>
+      <tr style="border-top:2px solid var(--azul);"><td style="padding:10px 0;font-weight:800;color:var(--azul);">💰 Patrimonio total</td><td style="text-align:right;font-weight:800;font-size:18px;color:var(--azul);">${fmt(patrimonio)}</td></tr>
+    </table>
+
+    ${j.enCarrera ? `<div style="background:#cce5ff;border-radius:8px;padding:12px;margin-top:12px;font-size:13px;">🎓 Estudiando ${j.carrera.nombre} — Año ${j.añosCarrera}/${j.carrera.duracion}</div>` : ""}
+  `;
+
+  document.getElementById("finanzas-contenido").innerHTML = html;
+  document.getElementById("modal-finanzas").style.display = "flex";
+}
+</script>
+</body>
+</html>
