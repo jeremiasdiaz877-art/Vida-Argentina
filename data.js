@@ -108,7 +108,8 @@ const EMPRESAS = [
   { nombre: "Consultora", emoji: "💼", precio: 3600000, retornoPorTurno: 70000, descripcion: "Clientes corporativos" },
   { nombre: "Farmacia", emoji: "💊", precio: 6000000, retornoPorTurno: 112000, descripcion: "Alta rentabilidad" },
   { nombre: "Franquicia de comida", emoji: "🍔", precio: 10500000, retornoPorTurno: 196000, descripcion: "Marca reconocida" },
-  { nombre: "Empresa de tecnología", emoji: "💻", precio: 18000000, retornoPorTurno: 350000, descripcion: "Alto crecimiento" }
+  { nombre: "Empresa de tecnología", emoji: "💻", precio: 18000000, retornoPorTurno: 350000, descripcion: "Alto crecimiento" },
+  { nombre: "Shopping", emoji: "🏬", precio: 120000000, retornoPorTurno: 2600000, descripcion: "Centro comercial gigante" }
 ];
 
 const PROPIEDADES = [
@@ -116,7 +117,8 @@ const PROPIEDADES = [
   { nombre: "Casa en barrio", emoji: "🏡", precio: 3500000, alquilerPorTurno: 130000, descripcion: "Tranquila y amplia" },
   { nombre: "Local comercial", emoji: "🏪", precio: 5000000, alquilerPorTurno: 200000, descripcion: "Zona de alto tráfico" },
   { nombre: "PH con jardín", emoji: "🏘️", precio: 7000000, alquilerPorTurno: 280000, descripcion: "Lujo accesible" },
-  { nombre: "Edificio de departamentos", emoji: "🏢", precio: 20000000, alquilerPorTurno: 800000, descripcion: "Inversión grande" }
+  { nombre: "Edificio de departamentos", emoji: "🏢", precio: 20000000, alquilerPorTurno: 800000, descripcion: "Inversión grande" },
+  { nombre: "Super Edificio", emoji: "🏙️", precio: 140000000, alquilerPorTurno: 6000000, descripcion: "Torre premium de lujo" }
 ];
 
 // Interés mensual de los préstamos: 1.5% del monto pedido, cobrado todos los meses

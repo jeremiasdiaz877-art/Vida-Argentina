@@ -148,6 +148,7 @@
     <button class="footer-btn" onclick="abrirInversiones()"><span class="icon">📈</span>Inversiones</button>
     <button class="footer-btn" onclick="abrirPrestamos()"><span class="icon">🏦</span>Préstamos</button>
     <button class="footer-btn" onclick="abrirPropiedades()"><span class="icon">🏠</span>Propiedades</button>
+    <button class="footer-btn" onclick="abrirPrestamosJugadores()"><span class="icon">🤝</span>Prestar</button>
     <button class="footer-btn" onclick="abrirFinanzas()"><span class="icon">💰</span>Finanzas</button>
   </div>
 </div>
@@ -258,6 +259,15 @@
     <button class="modal-close" onclick="cerrarModal('modal-propiedades')">×</button>
     <div class="modal-titulo">🏠 Propiedades</div>
     <div id="propiedades-contenido"></div>
+  </div>
+</div>
+
+<!-- Modal Préstamos entre jugadores -->
+<div id="modal-pjugador" class="modal-overlay" style="display:none;" onclick="cerrarModal('modal-pjugador')">
+  <div class="modal" onclick="event.stopPropagation()">
+    <button class="modal-close" onclick="cerrarModal('modal-pjugador')">×</button>
+    <div class="modal-titulo">🤝 Préstamos entre jugadores</div>
+    <div id="pjugador-contenido"></div>
   </div>
 </div>
 

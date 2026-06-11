@@ -192,24 +192,17 @@ function iniciarPollingSala() {
 async function iniciarSalaOnline() {
   if (!salaInfo || !salaInfo.esHost) return;
   if (salaJugadores.length < 2) { alert("Necesitás al menos 2 jugadores."); return; }
-  // Fase 2A: personaje por defecto (la elección de carrera online llega en el paso 2C)
-  const ciudadDef = { nombre: "Azul", bonusSueldo: 0, costoVida: 1 };
-  const carreraDef = CARRERAS.find(c => c.duracion === 0) || CARRERAS[CARRERAS.length - 1];
+  // 2C: cada jugador elige su provincia/ciudad/carrera por turnos
   estado.jugadores = salaJugadores.map(j => {
     const p = crearJugadorBase(j.nombre, j.avatar);
     p.id = j.id;
-    p.provincia = "Buenos Aires";
-    p.ciudad = ciudadDef;
-    p.carrera = carreraDef;
-    p.sueldo = carreraDef.sueldo;
-    p.gastoBase = Math.round(carreraDef.sueldo * 0.6);
-    p.enCarrera = false;
     return p;
   });
   estado.numJugadores = salaJugadores.length;
-  estado.jugadorActual = 0;
-  estado.ronda = 1;
-  initMercado();
+  estado.setupJugadorIdx = 0;
+  estado.setupPaso = 0;
+  estado.provinciaSeleccionada = null;
+  estado.faseOnline = "setup";
   online.activo = true;
   online.miIndice = estado.jugadores.findIndex(p => p.id === salaInfo.miId);
   online.version = 1;
@@ -261,10 +254,7 @@ async function pushEstado() {
 function entrarJuegoOnline() {
   if (intervalSala) clearInterval(intervalSala);
   if (intervalSync) clearInterval(intervalSync);
-  mostrarPantalla("pantalla-juego");
-  actualizarHUD();
-  actualizarTurno();
-  aplicarGating();
+  renderOnline();
   intervalSync = setInterval(async () => {
     if (!online.activo || !salaInfo) return;
     const sala = await supaGetSalaJuego(salaInfo.codigo);
@@ -272,11 +262,36 @@ function entrarJuegoOnline() {
     if ((sala.version || 0) > online.version) {
       online.version = sala.version;
       estado = sala.estado_juego;
-      actualizarHUD();
-      actualizarTurno();
-      aplicarGating();
+      renderOnline();
     }
   }, 1500);
+}
+
+// Dibuja la pantalla correcta según la fase online (setup o juego)
+function renderOnline() {
+  if (estado.faseOnline === "jugando") {
+    mostrarPantalla("pantalla-juego");
+    actualizarHUD();
+    actualizarTurno();
+    aplicarGating();
+    return;
+  }
+  // Fase de setup: cada uno elige su personaje por turnos
+  mostrarPantalla("pantalla-setup");
+  if (estado.setupJugadorIdx === online.miIndice) {
+    renderizarSetup(); // me toca configurar
+  } else {
+    const quien = estado.jugadores[estado.setupJugadorIdx];
+    document.getElementById("setup-avatar").textContent = quien.avatar;
+    document.getElementById("setup-nombre").textContent = quien.nombre;
+    document.getElementById("setup-paso").textContent = "Eligiendo su personaje...";
+    document.getElementById("setup-progress").innerHTML = "";
+    document.getElementById("setup-contenido").innerHTML = `<div style="text-align:center;padding:30px;background:#fff3cd;border:1px solid #ffc107;border-radius:12px;">
+      <div style="font-size:44px;">⏳</div>
+      <div style="font-weight:800;color:var(--azul);">${quien.nombre} está eligiendo su provincia y carrera</div>
+      <div style="font-size:13px;color:var(--gris-dark);margin-top:6px;">Esperá tu turno para configurar tu personaje</div>
+    </div>`;
+  }
 }
 
 // ¿Es mi turno? (en local siempre true)
@@ -369,6 +384,7 @@ function irASetup() {
 
 function crearJugadorBase(nombre, avatar) {
   return {
+    id: uid(),
     nombre, avatar,
     saldo: 600000,
     sueldo: 0,
@@ -468,17 +484,23 @@ function renderizarSetup() {
   }
 }
 
+// En online, solo el jugador que está en su turno de setup puede tocar
+function esMiSetup() { return !online.activo || estado.setupJugadorIdx === online.miIndice; }
+
 function seleccionarProvincia(idx) {
+  if (!esMiSetup()) return;
   estado.provinciaSeleccionada = idx;
   renderizarSetup();
 }
 
 function volverProvincias() {
+  if (!esMiSetup()) return;
   estado.provinciaSeleccionada = null;
   renderizarSetup();
 }
 
 function volverACiudad() {
+  if (!esMiSetup()) return;
   // Volver desde "Elegí tu carrera" a la selección de provincia/ciudad
   estado.setupPaso = 0;
   estado.provinciaSeleccionada = null;
@@ -486,6 +508,7 @@ function volverACiudad() {
 }
 
 function seleccionarCiudad(idx) {
+  if (!esMiSetup()) return;
   const j = estado.jugadores[estado.setupJugadorIdx];
   j.provincia = PROVINCIAS[estado.provinciaSeleccionada].nombre;
   j.ciudad = PROVINCIAS[estado.provinciaSeleccionada].ciudades[idx];
@@ -496,6 +519,7 @@ function seleccionarCiudad(idx) {
 }
 
 function seleccionarCarrera(idx) {
+  if (!esMiSetup()) return;
   const j = estado.jugadores[estado.setupJugadorIdx];
   const carrera = CARRERAS[idx];
   const bonusSueldo = j.ciudad ? j.ciudad.bonusSueldo : 0;
@@ -514,9 +538,23 @@ function seleccionarCarrera(idx) {
   estado.setupPaso = 0;
 
   if (estado.setupJugadorIdx >= estado.jugadores.length) {
-    iniciarJuego();
+    if (online.activo) {
+      estado.faseOnline = "jugando";
+      estado.jugadorActual = 0;
+      estado.ronda = 1;
+      initMercado();
+      pushEstado();
+      renderOnline();
+    } else {
+      iniciarJuego();
+    }
   } else {
-    renderizarSetup();
+    if (online.activo) {
+      pushEstado();
+      renderOnline();
+    } else {
+      renderizarSetup();
+    }
   }
 }
 
@@ -682,6 +720,11 @@ function procesarTurno(dado) {
     interesPrestamos += interes;
     amortizacion += capital;
     p.principal -= capital;
+    // Si es un préstamo de otro jugador, el prestamista cobra la cuota
+    if (p.tipo === "jugador" && p.acreedorId) {
+      const acreedor = estado.jugadores.find(x => x.id === p.acreedorId);
+      if (acreedor) acreedor.saldo += interes + capital;
+    }
   });
   j.prestamos = j.prestamos.filter(p => p.principal > 0.5);
   const cuotaTotal = interesPrestamos + amortizacion;
@@ -1352,6 +1395,7 @@ function abrirPrestamos() {
     window._prestamoPendiente = null;
     cerrarModal("modal-prestamos");
     actualizarHUD();
+    if (online.activo) pushEstado();
     alert(`✅ Préstamo de ${fmt(p.monto)} aprobado en ${p.banco}. Te cobran 1.5%/mes de interés mientras debas.`);
   };
 
@@ -1366,12 +1410,17 @@ function abrirPrestamos() {
     if (j.saldo < pago) { alert(`No te alcanza para pagar el mes (${fmt(pago)} = ${fmt(interes)} interés + ${fmt(capital)} capital). Tenés ${fmt(j.saldo)}.`); return; }
     j.saldo -= pago;
     p.principal -= capital;
+    if (p.tipo === "jugador" && p.acreedorId) {
+      const ac = estado.jugadores.find(x => x.id === p.acreedorId);
+      if (ac) ac.saldo += pago;
+    }
     let msg = `✅ Pagaste ${fmt(pago)} a ${p.banco} (${fmt(interes)} interés + ${fmt(capital)} capital).`;
     if (p.principal <= 0.5) {
       j.prestamos.splice(idx, 1);
       msg += `\n¡Saldaste la deuda por completo!`;
     }
     actualizarHUD();
+    if (online.activo) pushEstado();
     render();
     alert(msg);
   };
@@ -1383,9 +1432,14 @@ function abrirPrestamos() {
     if (!p) return;
     if (j.saldo < p.principal) { alert(`No te alcanza para cancelar la deuda. Necesitás ${fmt(p.principal)} y tenés ${fmt(j.saldo)}.`); return; }
     if (!confirm(`¿Cancelar toda la deuda con ${p.banco} por ${fmt(p.principal)}? Dejás de pagar el interés mensual.`)) return;
+    if (p.tipo === "jugador" && p.acreedorId) {
+      const ac = estado.jugadores.find(x => x.id === p.acreedorId);
+      if (ac) ac.saldo += p.principal;
+    }
     j.saldo -= p.principal;
     j.prestamos.splice(idx, 1);
     actualizarHUD();
+    if (online.activo) pushEstado();
     render();
     alert(`✅ Cancelaste la deuda con ${p.banco}. Ya no pagás más intereses.`);
   };
@@ -1418,7 +1472,7 @@ function abrirPrestamos() {
         <p style="font-weight:600;font-size:14px;margin-bottom:8px;">Deudas actuales:</p>
         ${j.prestamos.map((p, idx) => `
           <div style="background:var(--gris);border-radius:8px;padding:10px;margin-bottom:6px;font-size:13px;">
-            <div style="margin-bottom:8px;"><strong>${p.banco}</strong> — Capital restante: ${fmt(p.principal)} | Interés: ${fmt(Math.round(p.monto * p.tasaMensual))}/mes</div>
+            <div style="margin-bottom:8px;"><strong>${p.banco}</strong> — ${p.tipo === "jugador" ? "Resta" : "Capital restante"}: ${fmt(p.principal)} | ${p.tipo === "jugador" ? "Cuota" : "Interés"}: ${fmt(p.tipo === "jugador" ? p.cuotaPrincipal : Math.round(p.monto * p.tasaMensual))}/mes</div>
             <div style="display:flex;gap:8px;">
               <button class="btn btn-secondary btn-sm" onclick="pagarCuota(${idx})" style="flex:1;">Pagar 1 mes</button>
               <button class="btn btn-rojo btn-sm" onclick="cancelarDeuda(${idx})" style="flex:1;">Cancelar todo</button>
@@ -1434,6 +1488,117 @@ function abrirPrestamos() {
 
   render();
   document.getElementById("modal-prestamos").style.display = "flex";
+}
+
+// ==================== PRÉSTAMOS ENTRE JUGADORES ====================
+function abrirPrestamosJugadores() {
+  if (!esMiTurno()) { alert("Esperá tu turno para operar."); return; }
+  const yo = estado.jugadores[estado.jugadorActual];
+  const otros = estado.jugadores.filter(x => x.id !== yo.id && !x.eliminado);
+  if (otros.length === 0) { alert("No hay otros jugadores en la partida para prestar/pedir."); return; }
+
+  let otroId = otros[0].id;
+  let direccion = "presto"; // "presto" = yo le presto a el; "pido" = el me presta a mi
+
+  window.pjSelOtro = (id) => { otroId = id; render(); };
+  window.pjSelDir = (d) => { direccion = d; render(); };
+  window.pjActualizar = () => calcular();
+
+  function calcular() {
+    const cont = document.getElementById("pj-resumen");
+    if (!cont) return;
+    const monto = parseFloat((document.getElementById("pj-monto") || {}).value) || 0;
+    const interes = parseFloat((document.getElementById("pj-interes") || {}).value);
+    const meses = parseInt((document.getElementById("pj-cuotas") || {}).value) || 0;
+    window._pjPend = null;
+    if (monto < 1000) { cont.innerHTML = `<div class="prestamo-resumen" style="background:#fff3cd;border-color:#ffc107;">Ingresá el monto que se presta (mínimo ${fmt(1000)}).</div>`; return; }
+    if (isNaN(interes) || interes < 0) { cont.innerHTML = `<div class="prestamo-resumen" style="background:#fff3cd;border-color:#ffc107;">Ingresá el interés total en $ (ej: 400).</div>`; return; }
+    if (meses < 1 || meses > 24) { cont.innerHTML = `<div class="prestamo-resumen" style="background:#fff3cd;border-color:#ffc107;">Los meses para devolver van de 1 a 24.</div>`; return; }
+    const otro = estado.jugadores.find(x => x.id === otroId);
+    const prestamista = direccion === "presto" ? yo : otro;
+    if (prestamista.saldo < monto) {
+      cont.innerHTML = `<div class="prestamo-resumen" style="background:#f8d7da;border-color:#f5c6cb;">${direccion === "presto" ? "No tenés" : prestamista.nombre + " no tiene"} saldo suficiente. Hace falta ${fmt(monto)} y hay ${fmt(prestamista.saldo)}.</div>`;
+      return;
+    }
+    const total = monto + interes;
+    const cuotaMensual = Math.round((total / meses) * 100) / 100;
+    cont.innerHTML = `<div class="prestamo-resumen">
+      <strong>${direccion === "presto" ? "Vos le prestás a " + otro.nombre : otro.nombre + " te presta a vos"}</strong><br>
+      Presta: ${fmt(monto)}<br>
+      Interés total: ${fmt(interes)} → Total a devolver: ${fmt(total)}<br>
+      <strong>Cuota: ${fmt(cuotaMensual)}/mes × ${meses} meses</strong>
+    </div>`;
+    window._pjPend = { monto, interes, total, meses, cuotaMensual, otroId, direccion };
+  }
+
+  window.pjConfirmar = () => {
+    if (!window._pjPend) { alert("Completá monto, interés y meses."); return; }
+    const p = window._pjPend;
+    const otro = estado.jugadores.find(x => x.id === p.otroId);
+    const prestamista = p.direccion === "presto" ? yo : otro;
+    const deudor = p.direccion === "presto" ? otro : yo;
+    if (prestamista.saldo < p.monto) { alert("Saldo insuficiente del prestamista."); return; }
+    prestamista.saldo -= p.monto;
+    deudor.saldo += p.monto;
+    deudor.prestamos.push({
+      tipo: "jugador",
+      acreedorId: prestamista.id,
+      banco: "Préstamo de " + prestamista.nombre,
+      monto: p.monto,           // lo que recibió
+      totalAPagar: p.total,     // capital + interés
+      cuotas: p.meses,
+      principal: p.total,       // se amortiza hasta 0
+      cuotaPrincipal: p.cuotaMensual,
+      tasaMensual: 0            // el interés ya está dentro del total
+    });
+    window._pjPend = null;
+    actualizarHUD();
+    if (online.activo) pushEstado();
+    cerrarModal("modal-pjugador");
+    alert(`✅ Préstamo acordado: ${prestamista.nombre} le prestó ${fmt(p.monto)} a ${deudor.nombre}. Devuelve ${fmt(p.total)} en ${p.meses} meses (${fmt(p.cuotaMensual)}/mes).`);
+  };
+
+  function render() {
+    let html = `<div style="font-size:13px;color:var(--azul);font-weight:700;margin-bottom:4px;">💵 Tu saldo: ${fmt(yo.saldo)}</div>
+      <p style="font-size:13px;color:var(--gris-dark);margin-bottom:12px;">Prestá o pedí plata a otro jugador con la tasa y los meses que acuerden. Sin el 1.5% del banco.</p>`;
+
+    html += `<p style="font-weight:600;font-size:13px;margin-bottom:6px;">¿Con quién?</p><div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;">`;
+    otros.forEach(o => {
+      html += `<button class="btn ${otroId === o.id ? "btn-primary" : "btn-secondary"} btn-sm" onclick="pjSelOtro('${o.id}')">${o.avatar} ${o.nombre}</button>`;
+    });
+    html += `</div>`;
+
+    html += `<p style="font-weight:600;font-size:13px;margin-bottom:6px;">Dirección</p><div style="display:flex;gap:8px;margin-bottom:12px;">
+      <button class="btn ${direccion === "presto" ? "btn-primary" : "btn-secondary"} btn-sm" onclick="pjSelDir('presto')" style="flex:1;">Yo le presto</button>
+      <button class="btn ${direccion === "pido" ? "btn-primary" : "btn-secondary"} btn-sm" onclick="pjSelDir('pido')" style="flex:1;">Me presta</button>
+    </div>`;
+
+    html += `<input type="number" id="pj-monto" class="sala-input" placeholder="Monto que se presta (ej: 4000)" min="1000" oninput="pjActualizar()">
+      <input type="number" id="pj-interes" class="sala-input" placeholder="Interés total en $ (ej: 400)" min="0" oninput="pjActualizar()">
+      <input type="number" id="pj-cuotas" class="sala-input" placeholder="Meses para devolver (1 a 24)" min="1" max="24" oninput="pjActualizar()">
+      <div id="pj-resumen"></div>
+      <button class="btn btn-verde" onclick="pjConfirmar()">Confirmar préstamo</button>`;
+
+    // Lo que me deben otros jugadores
+    const meDeben = [];
+    estado.jugadores.forEach(d => {
+      (d.prestamos || []).forEach(pr => {
+        if (pr.tipo === "jugador" && pr.acreedorId === yo.id) meDeben.push({ deudor: d.nombre, restante: pr.principal, cuota: pr.cuotaPrincipal });
+      });
+    });
+    if (meDeben.length > 0) {
+      html += `<div style="margin-top:16px;border-top:1px solid var(--gris-med);padding-top:12px;">
+        <p style="font-weight:600;font-size:14px;margin-bottom:8px;">💰 Te deben:</p>
+        ${meDeben.map(m => `<div style="background:#d4edda;border-radius:8px;padding:10px;margin-bottom:6px;font-size:13px;"><strong>${m.deudor}</strong> — Capital: ${fmt(m.restante)} | Cobrás ${fmt(m.cuota)}/mes</div>`).join("")}
+      </div>`;
+    }
+
+    document.getElementById("pjugador-contenido").innerHTML = html;
+    calcular();
+  }
+
+  render();
+  document.getElementById("modal-pjugador").style.display = "flex";
 }
 
 function abrirInversiones() {
@@ -1500,6 +1665,7 @@ function abrirInversiones() {
       j.acciones.push({ nombre: inst.nombre, emoji: inst.emoji, tipo: inst.tipo, cantidad: cant, precioCompra: precio });
     }
     actualizarHUD();
+    if (online.activo) pushEstado();
     render();
     alert(`✅ Compraste ${cant} de ${inst.nombre} por ${fmt(total)}`);
   };
@@ -1517,6 +1683,7 @@ function abrirInversiones() {
     j._acumIngresos = (j._acumIngresos || 0) + pl;
     j.acciones = j.acciones.filter(a => a.nombre !== inst.nombre);
     actualizarHUD();
+    if (online.activo) pushEstado();
     render();
     alert(`✅ Vendiste ${ex.cantidad} de ${inst.nombre} por ${fmt(valor)} (${pl >= 0 ? "ganancia" : "pérdida"} de ${fmt(Math.abs(pl))})`);
   };
@@ -1557,6 +1724,7 @@ function abrirEmpresas() {
     j.saldo -= empresa.precio;
     j.empresas.push({ ...empresa });
     actualizarHUD();
+    if (online.activo) pushEstado();
     render();
   };
 
@@ -1569,6 +1737,7 @@ function abrirEmpresas() {
     j.saldo += valor;
     j.empresas.splice(pos, 1);
     actualizarHUD();
+    if (online.activo) pushEstado();
     render();
   };
 
@@ -1608,6 +1777,7 @@ function abrirPropiedades() {
     j.saldo -= prop.precio;
     j.propiedades.push({ ...prop });
     actualizarHUD();
+    if (online.activo) pushEstado();
     render();
   };
 
@@ -1620,6 +1790,7 @@ function abrirPropiedades() {
     j.saldo += valor;
     j.propiedades.splice(pos, 1);
     actualizarHUD();
+    if (online.activo) pushEstado();
     render();
   };
 
