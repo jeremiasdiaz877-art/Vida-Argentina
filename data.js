@@ -121,13 +121,34 @@ const PROPIEDADES = [
   { nombre: "Super Edificio", emoji: "🏙️", precio: 140000000, alquilerPorTurno: 6000000, descripcion: "Torre premium de lujo" }
 ];
 
-// Interés mensual de los préstamos: 1.5% del monto pedido, cobrado todos los meses
-const TASA_MENSUAL_PRESTAMO = 0.015;
-
+// Cada banco tiene su propia tasa mensual, monto máximo, plazos y beneficio
 const BANCOS = [
-  { nombre: "Banco Nación", emoji: "🏛️", maximo: 15000000, cuotas: [6, 12, 24] },
-  { nombre: "Banco Provincia", emoji: "🏦", maximo: 8000000, cuotas: [6, 12, 18] },
-  { nombre: "Mercado Pago", emoji: "📱", maximo: 2000000, cuotas: [3, 6, 12] }
+  { nombre: "Banco Nación", emoji: "🏛️", tasa: 0.010, maximo: 30000000, cuotas: [12, 24, 36], beneficio: "El interés más bajo (1.0%/mes)" },
+  { nombre: "Banco Provincia", emoji: "🏦", tasa: 0.015, maximo: 60000000, cuotas: [12, 24], beneficio: "Presta los montos más altos" },
+  { nombre: "Banco Galicia", emoji: "🔵", tasa: 0.018, maximo: 40000000, cuotas: [12, 24, 36, 48], beneficio: "Hasta 48 meses para devolver" },
+  { nombre: "Brubank", emoji: "📲", tasa: 0.025, maximo: 15000000, cuotas: [6, 12], beneficio: "No te exige patrimonio: presta igual", ignoraPatrimonio: true },
+  { nombre: "Mercado Pago", emoji: "💳", tasa: 0.030, maximo: 8000000, cuotas: [3, 6, 12], beneficio: "Adelanto rápido para emergencias" }
+];
+
+// Noticias del mes: algunas mueven el mercado (efectos), otras son color.
+// t = instrumento por nombre, o "ACCIONES" / "FCI" / "TODOS"; p = % de cambio
+const NOTICIAS = [
+  { emoji: "🛢️", titulo: "Boom petrolero", texto: "Sube el crudo y las energéticas vuelan.", efectos: [{ t: "YPF", p: 0.10 }, { t: "Pampa Energía", p: 0.12 }] },
+  { emoji: "⚡", titulo: "Crisis energética", texto: "Cortes de luz por la ola de calor. Pampa Energía sube 12%.", efectos: [{ t: "Pampa Energía", p: 0.12 }] },
+  { emoji: "🛒", titulo: "Récord de ventas online", texto: "Mercado Libre marca un nuevo máximo histórico.", efectos: [{ t: "Mercado Libre", p: 0.15 }] },
+  { emoji: "🏦", titulo: "El Banco Central sube las tasas", texto: "Los plazos fijos y los FCI ahora rinden más.", efectos: [{ t: "FCI", p: 0.05 }] },
+  { emoji: "🏗️", titulo: "Plan de obra pública", texto: "Más cemento en la calle: Loma Negra se beneficia.", efectos: [{ t: "Loma Negra", p: 0.10 }] },
+  { emoji: "💵", titulo: "Salta el dólar blue", texto: "El FCI Dólar de cobertura se dispara.", efectos: [{ t: "FCI Dólar (Cobertura)", p: 0.09 }] },
+  { emoji: "📉", titulo: "Corrida bancaria", texto: "Nerviosismo en los bancos: Galicia cae 12%.", efectos: [{ t: "Banco Galicia", p: -0.12 }] },
+  { emoji: "📰", titulo: "Escándalo mediático", texto: "Grupo Clarín bajo presión, su acción retrocede.", efectos: [{ t: "Grupo Clarín", p: -0.10 }] },
+  { emoji: "🤝", titulo: "Acuerdo con el FMI", texto: "El mercado lo festeja: suben las acciones.", efectos: [{ t: "ACCIONES", p: 0.05 }] },
+  { emoji: "💥", titulo: "Tensión financiera", texto: "Jornada de pánico: cae todo el panel.", efectos: [{ t: "ACCIONES", p: -0.08 }] },
+  { emoji: "🌾", titulo: "Súper cosecha", texto: "Entran dólares del campo y el mercado mejora.", efectos: [{ t: "TODOS", p: 0.04 }] },
+  { emoji: "🏭", titulo: "Reactivación industrial", texto: "Repuntan la producción y las energéticas.", efectos: [{ t: "YPF", p: 0.07 }, { t: "Pampa Energía", p: 0.06 }] },
+  { emoji: "🎉", titulo: "¡La Selección campeona!", texto: "Euforia nacional. El país entero festeja.", efectos: [] },
+  { emoji: "🚇", titulo: "Paro de transporte", texto: "Jornada complicada para moverse por la ciudad.", efectos: [] },
+  { emoji: "🌡️", titulo: "Ola de calor histórica", texto: "Récord de temperatura en todo el país.", efectos: [] },
+  { emoji: "🎬", titulo: "Estreno récord", texto: "El cine argentino la rompe en taquilla.", efectos: [] }
 ];
 
 const CARAS_DADO = ["⚀", "⚁", "⚂", "⚃", "⚄", "⚅"];

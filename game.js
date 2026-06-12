@@ -117,6 +117,17 @@ async function crearSala() {
   iniciarPollingSala();
 }
 
+function copiarCodigoSala() {
+  const codigo = salaInfo ? salaInfo.codigo : (document.getElementById("codigo-sala-display").textContent || "").trim();
+  if (!codigo || codigo === "------") return;
+  const onOk = () => alert(`✅ Código copiado: ${codigo}\nCompartilo con tus amigos.`);
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(codigo).then(onOk).catch(() => prompt("Copiá el código:", codigo));
+  } else {
+    prompt("Copiá el código:", codigo);
+  }
+}
+
 function renderListaEspera() {
   const html = salaJugadores.map(j =>
     `<div class="espera-jugador">
@@ -1009,6 +1020,15 @@ function calcularPatrimonio(j) {
   return total;
 }
 
+// Cuánta deuda total puede tener (lo que podría solventar vendiendo todo)
+function capacidadEndeudamiento(j) {
+  let total = j.saldo;
+  j.empresas.forEach(e => total += e.precio);
+  j.propiedades.forEach(p => total += p.precio);
+  j.acciones.forEach(a => total += getPrecio(a.nombre) * a.cantidad);
+  return Math.max(0, Math.round(total));
+}
+
 function siguienteTurno() {
   if (!esMiTurno()) return; // online: solo el jugador del turno puede pasar
   do {
@@ -1361,8 +1381,24 @@ function abrirPrestamos() {
       return;
     }
 
+    // Tope según patrimonio: la deuda total no puede superar lo que podés solventar
+    // (salvo bancos que no exigen patrimonio, ej: Brubank)
+    const j = estado.jugadores[estado.jugadorActual];
+    const capacidad = capacidadEndeudamiento(j);
+    const deudaActual = j.prestamos.reduce((s, p) => s + p.principal, 0);
+    if (!banco.ignoraPatrimonio && (deudaActual + montoSeleccionado) > capacidad) {
+      const disponible = Math.max(0, capacidad - deudaActual);
+      cont.innerHTML = `<div class="prestamo-resumen" style="background:#f8d7da;border-color:#f5c6cb;">
+        Superás tu capacidad de pago.<br>
+        Podés tener deuda hasta tu patrimonio: ${fmt(capacidad)}<br>
+        Deuda actual: ${fmt(deudaActual)} • Disponible: ${fmt(disponible)}<br>
+        <span style="font-size:12px;color:var(--gris-dark);">💡 Brubank presta sin exigir patrimonio.</span>
+      </div>`;
+      return;
+    }
+
     const monto = montoSeleccionado;
-    const tasaMensual = TASA_MENSUAL_PRESTAMO;
+    const tasaMensual = banco.tasa;
     const interesMensual = Math.round(monto * tasaMensual);
     const cuotaPrincipal = Math.round(monto / cuotasSeleccionadas);
     const pagoMensual = interesMensual + cuotaPrincipal;
@@ -1371,9 +1407,9 @@ function abrirPrestamos() {
 
     cont.innerHTML = `
       <div class="prestamo-resumen">
-        <strong>Resumen del préstamo:</strong><br>
+        <strong>Resumen del préstamo (${banco.nombre}):</strong><br>
         Monto: ${fmt(monto)} en ${cuotasSeleccionadas} meses<br>
-        Interés mensual (1.5%): ${fmt(interesMensual)}<br>
+        Interés mensual (${(tasaMensual * 100).toFixed(1)}%): ${fmt(interesMensual)}<br>
         Cuota de capital: ${fmt(cuotaPrincipal)}<br>
         <strong>Pago por mes: ${fmt(pagoMensual)}</strong><br>
         Interés total: ${fmt(interesTotal)} • Total: ${fmt(totalAPagar)}
@@ -1450,7 +1486,8 @@ function abrirPrestamos() {
     BANCOS.forEach((b, i) => {
       html += `<div class="prestamo-opcion ${bancoSeleccionado === i ? 'selected' : ''}" onclick="selectBanco(${i})">
         <div class="prestamo-nombre">${b.emoji} ${b.nombre}</div>
-        <div class="prestamo-detalle">Interés ${(TASA_MENSUAL_PRESTAMO * 100).toFixed(1)}%/mes • Máximo ${fmt(b.maximo)}</div>
+        <div class="prestamo-detalle">Interés ${(b.tasa * 100).toFixed(1)}%/mes • Máximo ${fmt(b.maximo)}</div>
+        <div class="prestamo-detalle" style="color:var(--verde);">✨ ${b.beneficio}</div>
       </div>`;
     });
     html += `</div>`;
