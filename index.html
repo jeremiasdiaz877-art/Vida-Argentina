@@ -16,6 +16,7 @@
     <div class="logo-sub">EL JUEGO DE LA VIDA ECONÓMICA</div>
   </div>
   <div class="inicio-btns">
+    <button class="btn btn-amarillo" id="btn-continuar" onclick="continuarPartida()" style="display:none;">↩️ Continuar partida</button>
     <button class="btn btn-primary" onclick="irAJugadores()">👥 Jugar Local — Gratis</button>
     <button class="btn btn-secondary" onclick="irASala()">🌐 Crear / Unirse a Sala</button>
     <button class="btn btn-secondary" onclick="abrirRanking()">🏆 Salón de la Fama</button>
@@ -134,6 +135,7 @@
           <span id="turno-nombre">Jugador</span>
         </div>
         <div class="turno-ronda" id="turno-info-sub">Ronda 1 • Edad: 18 años</div>
+        <div id="turno-timer" style="font-size:18px;font-weight:600;color:var(--azul);margin-top:6px;">⏱ 1:30</div>
       </div>
       <div class="dado-container">
         <div class="dado" id="dado-display" onclick="tirarDado()">⚀</div>

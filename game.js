@@ -22,7 +22,9 @@ function generarCodigo() {
   return Array.from({length: 6}, () => chars[Math.floor(Math.random() * chars.length)]).join("");
 }
 
+let pantallaActual = "pantalla-inicio";
 function mostrarPantalla(id) {
+  pantallaActual = id;
   document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
   document.getElementById(id).classList.add("active");
 }
@@ -224,6 +226,8 @@ async function iniciarSalaOnline() {
 
 // Salir de la sala (corta el polling)
 function salirSala() {
+  detenerTimerTurno();
+  limpiarPartidaGuardada();
   if (intervalSala) clearInterval(intervalSala);
   if (intervalSync) clearInterval(intervalSync);
   intervalSala = null;
@@ -285,6 +289,8 @@ function renderOnline() {
     actualizarHUD();
     actualizarTurno();
     aplicarGating();
+    revisarSolicitudes(); // ¿me pidieron/ofrecieron un préstamo?
+    revisarAvisos();      // ¿me respondieron una solicitud?
     return;
   }
   // Fase de setup: cada uno elige su personaje por turnos
@@ -655,6 +661,71 @@ function actualizarHUD() {
       <div class="hud-saldo">${fmt(j.saldo)}</div>
     </div>
   `).join("");
+  guardarPartida();
+}
+
+// ==================== GUARDAR/CONTINUAR PARTIDA (anti-refresh) ====================
+const PARTIDA_KEY = "vida_partida_actual";
+
+function guardarPartida() {
+  try {
+    if (online.activo && salaInfo) {
+      // Online: guardamos solo los datos para reconectar a la sala (el estado vive en la nube)
+      localStorage.setItem(PARTIDA_KEY, JSON.stringify({ modo: "online", salaInfo }));
+    } else if (pantallaActual === "pantalla-juego" && estado.jugadores.length > 0) {
+      localStorage.setItem(PARTIDA_KEY, JSON.stringify({ modo: "local", estado }));
+    }
+  } catch (e) {}
+}
+
+function limpiarPartidaGuardada() {
+  try { localStorage.removeItem(PARTIDA_KEY); } catch (e) {}
+  const btn = document.getElementById("btn-continuar");
+  if (btn) btn.style.display = "none";
+}
+
+// Al cargar la página: si hay una partida guardada, muestra el botón "Continuar"
+function restaurarPartida() {
+  let snap = null;
+  try { snap = JSON.parse(localStorage.getItem(PARTIDA_KEY) || "null"); } catch (e) {}
+  const btn = document.getElementById("btn-continuar");
+  if (!btn) return;
+  if (snap && (snap.modo === "local" || snap.modo === "online")) {
+    btn.style.display = "flex";
+  } else {
+    btn.style.display = "none";
+  }
+}
+
+async function continuarPartida() {
+  let snap = null;
+  try { snap = JSON.parse(localStorage.getItem(PARTIDA_KEY) || "null"); } catch (e) {}
+  if (!snap) return;
+
+  if (snap.modo === "local") {
+    estado = snap.estado;
+    online = { activo: false, miIndice: -1, version: 0 };
+    mostrarPantalla("pantalla-juego");
+    actualizarHUD();
+    actualizarTurno();
+    return;
+  }
+
+  if (snap.modo === "online" && snap.salaInfo) {
+    if (!hayBaseDeDatos()) { alert("No se puede reconectar (sin base de datos)."); return; }
+    salaInfo = snap.salaInfo;
+    const sala = await supaGetSalaJuego(salaInfo.codigo);
+    if (!sala || !sala.estado_juego) {
+      alert("La sala ya no existe. La partida terminó o fue cerrada.");
+      limpiarPartidaGuardada();
+      return;
+    }
+    estado = sala.estado_juego;
+    online.activo = true;
+    online.version = sala.version || 1;
+    online.miIndice = estado.jugadores.findIndex(p => p.id === salaInfo.miId);
+    entrarJuegoOnline();
+  }
 }
 
 // Devuelve la fecha (mes y año) según los meses transcurridos del jugador
@@ -675,6 +746,59 @@ function actualizarTurno() {
   document.getElementById("btn-siguiente").style.display = "none";
   document.getElementById("dado-display").textContent = "⚀";
   actualizarMercadoPanel();
+  turnoTirado = false;
+  iniciarTimerTurno();
+}
+
+// ==================== CRONÓMETRO DE TURNO (1:30) ====================
+const SEGUNDOS_POR_TURNO = 90;
+let timerTurno = null;
+let segundosTurno = SEGUNDOS_POR_TURNO;
+let turnoTirado = false;
+
+function iniciarTimerTurno() {
+  detenerTimerTurno();
+  segundosTurno = SEGUNDOS_POR_TURNO;
+  actualizarTimerDisplay();
+  timerTurno = setInterval(() => {
+    segundosTurno--;
+    actualizarTimerDisplay();
+    if (segundosTurno <= 0) {
+      detenerTimerTurno();
+      turnoAgotado();
+    }
+  }, 1000);
+}
+
+function detenerTimerTurno() {
+  if (timerTurno) clearInterval(timerTurno);
+  timerTurno = null;
+}
+
+function actualizarTimerDisplay() {
+  const el = document.getElementById("turno-timer");
+  if (!el) return;
+  const s = Math.max(0, segundosTurno);
+  el.textContent = `⏱ ${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+  el.style.color = s <= 30 ? "var(--rojo)" : "var(--azul)";
+  el.style.fontWeight = s <= 30 ? "800" : "600";
+}
+
+function cerrarTodosModales() {
+  document.querySelectorAll(".modal-overlay").forEach(m => { m.style.display = "none"; });
+}
+
+function turnoAgotado() {
+  if (online.activo && !esMiTurno()) return; // solo el jugador del turno auto-pasa
+  cerrarTodosModales();
+  if (!turnoTirado) {
+    // No tiró: se le tira automáticamente para que no pierda sus ingresos, y pasa
+    const dado = Math.floor(Math.random() * 6) + 1;
+    document.getElementById("dado-display").textContent = CARAS_DADO[dado - 1];
+    procesarTurno(dado, true);
+  } else {
+    siguienteTurno();
+  }
 }
 
 function tirarDado() {
@@ -691,7 +815,9 @@ function tirarDado() {
   }, 600);
 }
 
-function procesarTurno(dado) {
+function procesarTurno(dado, auto) {
+  detenerTimerTurno();
+  turnoTirado = true;
   const j = estado.jugadores[estado.jugadorActual];
 
   // Pasa un mes
@@ -785,6 +911,14 @@ function procesarTurno(dado) {
     gastosFijos, interesPrestamos, amortizacion, costoCarrera,
     evento, impactoEvento, impuesto, baseImpuesto, tasaImp, saldoDespues: j.saldo
   };
+
+  if (auto) {
+    // Auto-pase por tiempo agotado: sin modal, verifica victoria y pasa
+    if (online.activo) pushEstado();
+    if (calcularPatrimonio(j) >= META_VICTORIA) { detenerTimerTurno(); mostrarVictoria(j); return; }
+    siguienteTurno();
+    return;
+  }
 
   mostrarResumenTurno(j);
   if (online.activo) pushEstado(); // sincronizar el resultado del turno
@@ -1003,6 +1137,8 @@ function verificarVictoria(j) {
 }
 
 function mostrarGameOver() {
+  detenerTimerTurno();
+  limpiarPartidaGuardada();
   mostrarPantalla("pantalla-victoria");
   document.querySelector("#pantalla-victoria .victoria-emoji").textContent = "💸";
   document.querySelector("#pantalla-victoria .victoria-titulo").textContent = "GAME OVER";
@@ -1044,6 +1180,8 @@ function siguienteTurno() {
 
 // ==================== VICTORIA ====================
 function mostrarVictoria(ganador) {
+  detenerTimerTurno();
+  limpiarPartidaGuardada();
   estado._ganador = ganador;
   // Solo entra al Salón de la Fama quien REALMENTE llegó a la meta
   const llegoALaMeta = calcularPatrimonio(ganador) >= META_VICTORIA;
@@ -1323,6 +1461,8 @@ function mostrarPantallaVictoria(ganador) {
 }
 
 function reiniciarJuego() {
+  detenerTimerTurno();
+  limpiarPartidaGuardada();
   if (intervalSync) clearInterval(intervalSync);
   intervalSync = null;
   online = { activo: false, miIndice: -1, version: 0 };
@@ -1528,6 +1668,80 @@ function abrirPrestamos() {
 }
 
 // ==================== PRÉSTAMOS ENTRE JUGADORES ====================
+// Concreta el préstamo: transfiere la plata y crea la deuda
+function ejecutarPrestamoJugador(prestamista, deudor, monto, total, meses, cuotaMensual) {
+  prestamista.saldo -= monto;
+  deudor.saldo += monto;
+  deudor.prestamos.push({
+    tipo: "jugador",
+    acreedorId: prestamista.id,
+    banco: "Préstamo de " + prestamista.nombre,
+    monto: monto,             // lo que recibió
+    totalAPagar: total,       // capital + interés
+    cuotas: meses,
+    principal: total,         // se amortiza hasta 0
+    cuotaPrincipal: cuotaMensual,
+    tasaMensual: 0            // el interés ya está dentro del total
+  });
+}
+
+// Online: revisa si tengo solicitudes de préstamo pendientes y las muestro para aceptar/rechazar
+function revisarSolicitudes() {
+  if (!online.activo || !salaInfo) return;
+  if (window._solicitudAbierta) return; // evita mostrar dos veces
+  const lista = estado.solicitudesPrestamo || [];
+  const miId = salaInfo.miId;
+  const sol = lista.find(s => s.aceptanteId === miId);
+  if (!sol) return;
+
+  const prestamista = estado.jugadores.find(x => x.id === sol.prestamistaId);
+  const deudor = estado.jugadores.find(x => x.id === sol.deudorId);
+  if (!prestamista || !deudor) {
+    estado.solicitudesPrestamo = lista.filter(s => s.id !== sol.id);
+    pushEstado();
+    return;
+  }
+
+  window._solicitudAbierta = true;
+  const soyPrestamista = prestamista.id === miId;
+  const pregunta = soyPrestamista
+    ? `🤝 ${deudor.nombre} te pide prestado ${fmt(sol.monto)}.\nTe devuelve ${fmt(sol.total)} en ${sol.meses} cuotas de ${fmt(sol.cuotaMensual)}/mes.\n\n¿Aceptás prestarle?`
+    : `🤝 ${prestamista.nombre} te ofrece un préstamo de ${fmt(sol.monto)}.\nDevolvés ${fmt(sol.total)} en ${sol.meses} cuotas de ${fmt(sol.cuotaMensual)}/mes.\n\n¿Aceptás la deuda?`;
+
+  const acepta = confirm(pregunta);
+  estado.solicitudesPrestamo = (estado.solicitudesPrestamo || []).filter(s => s.id !== sol.id);
+
+  if (acepta) {
+    if (prestamista.saldo < sol.monto) {
+      alert("No se pudo concretar: el prestamista ya no tiene saldo suficiente.");
+    } else {
+      ejecutarPrestamoJugador(prestamista, deudor, sol.monto, sol.total, sol.meses, sol.cuotaMensual);
+      if (!estado.avisos) estado.avisos = [];
+      estado.avisos.push({ id: uid(), paraId: soyPrestamista ? deudor.id : prestamista.id, texto: `✅ Préstamo aceptado: ${prestamista.nombre} le prestó ${fmt(sol.monto)} a ${deudor.nombre} (${fmt(sol.cuotaMensual)}/mes × ${sol.meses}).` });
+      alert("✅ Préstamo concretado.");
+    }
+  } else {
+    if (!estado.avisos) estado.avisos = [];
+    estado.avisos.push({ id: uid(), paraId: soyPrestamista ? deudor.id : prestamista.id, texto: `❌ Tu solicitud de préstamo fue rechazada.` });
+  }
+  actualizarHUD();
+  pushEstado();
+  window._solicitudAbierta = false;
+}
+
+// Online: muestra avisos dirigidos a mí (resultado de mis solicitudes)
+function revisarAvisos() {
+  if (!online.activo || !salaInfo) return;
+  const lista = estado.avisos || [];
+  const miId = salaInfo.miId;
+  const mios = lista.filter(a => a.paraId === miId);
+  if (mios.length === 0) return;
+  estado.avisos = lista.filter(a => a.paraId !== miId);
+  mios.forEach(a => alert(a.texto));
+  actualizarHUD();
+  pushEstado();
+}
+
 function abrirPrestamosJugadores() {
   if (!esMiTurno()) { alert("Esperá tu turno para operar."); return; }
   const yo = estado.jugadores[estado.jugadorActual];
@@ -1575,22 +1789,36 @@ function abrirPrestamosJugadores() {
     const prestamista = p.direccion === "presto" ? yo : otro;
     const deudor = p.direccion === "presto" ? otro : yo;
     if (prestamista.saldo < p.monto) { alert("Saldo insuficiente del prestamista."); return; }
-    prestamista.saldo -= p.monto;
-    deudor.saldo += p.monto;
-    deudor.prestamos.push({
-      tipo: "jugador",
-      acreedorId: prestamista.id,
-      banco: "Préstamo de " + prestamista.nombre,
-      monto: p.monto,           // lo que recibió
-      totalAPagar: p.total,     // capital + interés
-      cuotas: p.meses,
-      principal: p.total,       // se amortiza hasta 0
-      cuotaPrincipal: p.cuotaMensual,
-      tasaMensual: 0            // el interés ya está dentro del total
-    });
+
+    // ⚠️ El otro jugador SIEMPRE tiene que aceptar (nadie te puede sacar plata ni meterte deuda sin tu OK)
+    if (online.activo) {
+      // Online: se manda una solicitud y el otro la acepta/rechaza desde su dispositivo
+      if (!estado.solicitudesPrestamo) estado.solicitudesPrestamo = [];
+      estado.solicitudesPrestamo.push({
+        id: uid(),
+        aceptanteId: otro.id,
+        prestamistaId: prestamista.id,
+        deudorId: deudor.id,
+        monto: p.monto, interes: p.interes, total: p.total, meses: p.meses, cuotaMensual: p.cuotaMensual
+      });
+      window._pjPend = null;
+      pushEstado();
+      cerrarModal("modal-pjugador");
+      alert(`📨 Solicitud enviada a ${otro.nombre}. El préstamo se concreta solo si acepta.`);
+      return;
+    }
+
+    // Local (mismo dispositivo): el otro jugador acepta acá mismo
+    const pregunta = p.direccion === "presto"
+      ? `${otro.nombre}: ${yo.nombre} te ofrece un préstamo de ${fmt(p.monto)}.\nDevolvés ${fmt(p.total)} en ${p.meses} cuotas de ${fmt(p.cuotaMensual)}/mes.\n\n¿Aceptás la deuda?`
+      : `${otro.nombre}: ${yo.nombre} te pide prestado ${fmt(p.monto)}.\nTe devuelve ${fmt(p.total)} en ${p.meses} cuotas de ${fmt(p.cuotaMensual)}/mes.\n\n¿Aceptás prestarle?`;
+    if (!confirm(pregunta)) {
+      alert(`❌ ${otro.nombre} rechazó el préstamo.`);
+      return;
+    }
+    ejecutarPrestamoJugador(prestamista, deudor, p.monto, p.total, p.meses, p.cuotaMensual);
     window._pjPend = null;
     actualizarHUD();
-    if (online.activo) pushEstado();
     cerrarModal("modal-pjugador");
     alert(`✅ Préstamo acordado: ${prestamista.nombre} le prestó ${fmt(p.monto)} a ${deudor.nombre}. Devuelve ${fmt(p.total)} en ${p.meses} meses (${fmt(p.cuotaMensual)}/mes).`);
   };
@@ -1886,3 +2114,5 @@ function verFinanzas(idx) {
 
 // Al cargar la página, refleja si hay una sesión guardada
 actualizarUIAuth();
+// Si quedó una partida sin terminar, muestra el botón "Continuar"
+restaurarPartida();
