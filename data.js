@@ -130,11 +130,11 @@ const PROPIEDADES = [
 
 // Cada banco tiene su propia tasa mensual, monto máximo, plazos y beneficio
 const BANCOS = [
-  { nombre: "Banco Nación", emoji: "🏛️", tasa: 0.010, maximo: 30000000, cuotas: [12, 24, 36], beneficio: "El interés más bajo (1.0%/mes)" },
-  { nombre: "Banco Provincia", emoji: "🏦", tasa: 0.015, maximo: 60000000, cuotas: [12, 24], beneficio: "Presta los montos más altos" },
-  { nombre: "Banco Galicia", emoji: "🔵", tasa: 0.018, maximo: 40000000, cuotas: [12, 24, 36, 48], beneficio: "Hasta 48 meses para devolver" },
-  { nombre: "Brubank", emoji: "📲", tasa: 0.025, maximo: 15000000, cuotas: [6, 12], beneficio: "No te exige patrimonio: presta igual", ignoraPatrimonio: true },
-  { nombre: "Mercado Pago", emoji: "💳", tasa: 0.030, maximo: 8000000, cuotas: [3, 6, 12], beneficio: "Adelanto rápido para emergencias" }
+  { nombre: "Banco Nación", emoji: "🏛️", tasa: 0.010, maximo: 30000000, cuotas: [12, 24, 36], maxPorSemestre: 2, beneficio: "El interés más bajo (1.0%/mes)" },
+  { nombre: "Banco Provincia", emoji: "🏦", tasa: 0.015, maximo: 60000000, cuotas: [12, 24], maxPorSemestre: 2, beneficio: "Presta los montos más altos" },
+  { nombre: "Banco Galicia", emoji: "🔵", tasa: 0.018, maximo: 40000000, cuotas: [12, 24, 36, 48], maxPorSemestre: 1, beneficio: "Hasta 48 meses, pero 1 crédito por semestre" },
+  { nombre: "Brubank", emoji: "📲", tasa: 0.025, maximo: 15000000, cuotas: [6, 12], maxPorSemestre: 2, beneficio: "No te exige patrimonio: presta igual", ignoraPatrimonio: true },
+  { nombre: "Mercado Pago", emoji: "💳", tasa: 0.030, maximo: 8000000, cuotas: [3, 6, 12], maxPorSemestre: 2, beneficio: "Adelanto rápido para emergencias" }
 ];
 
 // Noticias del mes: algunas mueven el mercado (efectos), otras son color.

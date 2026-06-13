@@ -33,9 +33,15 @@ function cerrarModal(id) {
   document.getElementById(id).style.display = "none";
 }
 
+// Registra un evento en Google Analytics (si está activo)
+function track(evento, params) {
+  try { if (window.gtag) window.gtag("event", evento, params || {}); } catch (e) {}
+}
+
 const CAFECITO_URL = "https://cafecito.app/vida-argentina";
 
 function abrirCafecito() {
+  track("apoyo_click");
   document.getElementById("modal-apoyar").style.display = "flex";
 }
 
@@ -113,6 +119,7 @@ async function crearSala() {
   salaJugadores = [{ id: miId, nombre, avatar, esHost: true }];
   const ok = await supaCrearSala(codigo, salaJugadores);
   if (!ok) { alert("No se pudo crear la sala. Probá de nuevo."); return; }
+  track("sala_creada");
   salaInfo = { codigo, esHost: true, miNombre: nombre, miAvatar: avatar, miId };
   estado.codigoSala = codigo;
   estado.modoOnline = true;
@@ -173,6 +180,7 @@ async function unirseSala() {
   jugadores.push({ id: miId, nombre, avatar, esHost: false });
   const ok = await supaUpdateSala(codigo, { jugadores });
   if (!ok) { alert("No se pudo unir a la sala. Probá de nuevo."); return; }
+  track("sala_unida");
   salaInfo = { codigo, esHost: false, miNombre: nombre, miAvatar: avatar, miId };
   estado.codigoSala = codigo;
   estado.modoOnline = true;
@@ -209,6 +217,7 @@ function iniciarPollingSala() {
 async function iniciarSalaOnline() {
   if (!salaInfo || !salaInfo.esHost) return;
   if (salaJugadores.length < 2) { alert("Necesitás al menos 2 jugadores."); return; }
+  track("partida_iniciada", { modo: "online", jugadores: salaJugadores.length });
   // 2C: cada jugador elige su provincia/ciudad/carrera por turnos
   estado.jugadores = salaJugadores.map(j => {
     const p = crearJugadorBase(j.nombre, j.avatar);
@@ -584,6 +593,7 @@ function iniciarJuego() {
   estado.jugadorActual = 0;
   estado.ronda = 1;
   initMercado();
+  track("partida_iniciada", { modo: "local", jugadores: estado.jugadores.length });
   mostrarPantalla("pantalla-juego");
   actualizarHUD();
   actualizarTurno();
@@ -848,7 +858,7 @@ function tirarDado() {
 }
 
 function procesarTurno(dado, auto) {
-  detenerTimerTurno();
+  // El cronómetro NO se frena al tirar: sigue corriendo hasta "Siguiente turno"
   turnoTirado = true;
   const j = estado.jugadores[estado.jugadorActual];
 
@@ -936,6 +946,7 @@ function procesarTurno(dado, auto) {
     j._ultimaBaseImpuesto = baseImpuesto;
     j._acumIngresos = 0;
     j._acumPrestamos = 0;
+    j._prestamosSemestre = {}; // nuevo semestre: se reinician los créditos por banco
   }
 
   // Guardar el resumen del turno para mostrarlo
@@ -1199,7 +1210,9 @@ function calcularPatrimonio(j) {
 
 // Cuánta deuda total puede tener (lo que podría solventar vendiendo todo)
 function capacidadEndeudamiento(j) {
-  let total = j.saldo;
+  // Activos vendibles + 6 sueldos de capacidad de repago.
+  // NO cuenta el saldo (si no, la plata del préstamo agrandaría el límite y se podrían encadenar).
+  let total = (j.sueldo || 0) * 6;
   j.empresas.forEach(e => total += e.precio);
   j.propiedades.forEach(p => total += p.precio);
   j.acciones.forEach(a => total += getPrecio(a.nombre) * a.cantidad);
@@ -1208,6 +1221,7 @@ function capacidadEndeudamiento(j) {
 
 function siguienteTurno() {
   if (!esMiTurno()) return; // online: solo el jugador del turno puede pasar
+  detenerTimerTurno(); // se frena al pasar el turno (se reinicia en el próximo)
   do {
     estado.jugadorActual = (estado.jugadorActual + 1) % estado.jugadores.length;
     if (estado.jugadorActual === 0) estado.ronda++;
@@ -1230,6 +1244,7 @@ function mostrarVictoria(ganador) {
     mostrarPantallaVictoria(ganador);
     return;
   }
+  track("partida_ganada", { meses: ganador.meses || 0, patrimonio: calcularPatrimonio(ganador) });
   const sesion = getSesion();
   if (sesion) {
     // Usuario logueado: se guarda automáticamente bajo su cuenta
@@ -1450,6 +1465,7 @@ async function doRegistro() {
     if (data.access_token) {
       setSesion({ token: data.access_token, nombre, usuario: email, uid: data.user && data.user.id });
       cerrarModal("modal-auth");
+      track("registro");
       alert(`✅ ¡Cuenta creada! Bienvenido, ${nombre}.`);
     } else {
       authMsg("✅ Cuenta creada. Si te pide confirmar el email, revisá tu casilla. Luego iniciá sesión.", false);
@@ -1477,6 +1493,7 @@ async function doLogin() {
     const nombre = (data.user && data.user.user_metadata && data.user.user_metadata.nombre) || email.split("@")[0];
     setSesion({ token: data.access_token, nombre, usuario: email, uid: data.user && data.user.id });
     cerrarModal("modal-auth");
+    track("login");
     alert(`✅ ¡Hola de nuevo, ${nombre}!`);
   } catch (e) {
     authMsg("❌ " + e.message, true);
@@ -1562,16 +1579,28 @@ function abrirPrestamos() {
       return;
     }
 
+    const j = estado.jugadores[estado.jugadorActual];
+
+    // Límite de créditos por semestre por banco
+    const maxSem = banco.maxPorSemestre || 2;
+    const usados = (j._prestamosSemestre && j._prestamosSemestre[banco.nombre]) || 0;
+    if (usados >= maxSem) {
+      cont.innerHTML = `<div class="prestamo-resumen" style="background:#f8d7da;border-color:#f5c6cb;">
+        Ya usaste tus ${maxSem} crédito${maxSem > 1 ? "s" : ""} de ${banco.nombre} este semestre.<br>
+        <span style="font-size:12px;color:var(--gris-dark);">Esperá al próximo semestre o probá con otro banco.</span>
+      </div>`;
+      return;
+    }
+
     // Tope según patrimonio: la deuda total no puede superar lo que podés solventar
     // (salvo bancos que no exigen patrimonio, ej: Brubank)
-    const j = estado.jugadores[estado.jugadorActual];
     const capacidad = capacidadEndeudamiento(j);
     const deudaActual = j.prestamos.reduce((s, p) => s + p.principal, 0);
     if (!banco.ignoraPatrimonio && (deudaActual + montoSeleccionado) > capacidad) {
       const disponible = Math.max(0, capacidad - deudaActual);
       cont.innerHTML = `<div class="prestamo-resumen" style="background:#f8d7da;border-color:#f5c6cb;">
         Superás tu capacidad de pago.<br>
-        Podés tener deuda hasta tu patrimonio: ${fmt(capacidad)}<br>
+        Deuda máxima (activos + 6 sueldos): ${fmt(capacidad)}<br>
         Deuda actual: ${fmt(deudaActual)} • Disponible: ${fmt(disponible)}<br>
         <span style="font-size:12px;color:var(--gris-dark);">💡 Brubank presta sin exigir patrimonio.</span>
       </div>`;
@@ -1609,11 +1638,15 @@ function abrirPrestamos() {
     const p = window._prestamoPendiente;
     j.saldo += p.monto;
     j.prestamos.push({ ...p });
+    // contar el crédito en el semestre actual
+    if (!j._prestamosSemestre) j._prestamosSemestre = {};
+    j._prestamosSemestre[p.banco] = (j._prestamosSemestre[p.banco] || 0) + 1;
     window._prestamoPendiente = null;
     cerrarModal("modal-prestamos");
     actualizarHUD();
     if (online.activo) pushEstado();
-    alert(`✅ Préstamo de ${fmt(p.monto)} aprobado en ${p.banco}. Te cobran 1.5%/mes de interés mientras debas.`);
+    const tasaTxt = (p.tasaMensual * 100).toFixed(1);
+    alert(`✅ Préstamo de ${fmt(p.monto)} aprobado en ${p.banco}. Te cobran ${tasaTxt}%/mes mientras debas.`);
   };
 
   // Pagar un mes adelantado (interés + cuota de capital)

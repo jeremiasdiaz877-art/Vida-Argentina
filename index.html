@@ -5,6 +5,20 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Vida Argentina — El Juego de la Vida Económica</title>
 <link rel="stylesheet" href="styles.css">
+<!-- Google Analytics (GA4) -->
+<script>
+  const GA_ID = "G-6YMRYZFDCV";
+  if (GA_ID && GA_ID.indexOf("XXXX") === -1) {
+    const s = document.createElement("script");
+    s.async = true;
+    s.src = "https://www.googletagmanager.com/gtag/js?id=" + GA_ID;
+    document.head.appendChild(s);
+    window.dataLayer = window.dataLayer || [];
+    window.gtag = function () { dataLayer.push(arguments); };
+    gtag("js", new Date());
+    gtag("config", GA_ID);
+  }
+</script>
 </head>
 <body>
 
