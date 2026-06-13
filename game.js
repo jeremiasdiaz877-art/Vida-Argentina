@@ -1208,11 +1208,10 @@ function calcularPatrimonio(j) {
   return total;
 }
 
-// Cuánta deuda total puede tener (lo que podría solventar vendiendo todo)
+// Límite de deuda = patrimonio total (saldo + activos). Frena el crecimiento rápido.
+// El encadenar muchos préstamos se controla con el límite por semestre.
 function capacidadEndeudamiento(j) {
-  // Activos vendibles + 6 sueldos de capacidad de repago.
-  // NO cuenta el saldo (si no, la plata del préstamo agrandaría el límite y se podrían encadenar).
-  let total = (j.sueldo || 0) * 6;
+  let total = j.saldo;
   j.empresas.forEach(e => total += e.precio);
   j.propiedades.forEach(p => total += p.precio);
   j.acciones.forEach(a => total += getPrecio(a.nombre) * a.cantidad);
@@ -1599,8 +1598,8 @@ function abrirPrestamos() {
     if (!banco.ignoraPatrimonio && (deudaActual + montoSeleccionado) > capacidad) {
       const disponible = Math.max(0, capacidad - deudaActual);
       cont.innerHTML = `<div class="prestamo-resumen" style="background:#f8d7da;border-color:#f5c6cb;">
-        Superás tu capacidad de pago.<br>
-        Deuda máxima (activos + 6 sueldos): ${fmt(capacidad)}<br>
+        Superás tu límite de deuda.<br>
+        Deuda máxima (tu patrimonio): ${fmt(capacidad)}<br>
         Deuda actual: ${fmt(deudaActual)} • Disponible: ${fmt(disponible)}<br>
         <span style="font-size:12px;color:var(--gris-dark);">💡 Brubank presta sin exigir patrimonio.</span>
       </div>`;
