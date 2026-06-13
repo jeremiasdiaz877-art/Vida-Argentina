@@ -62,6 +62,9 @@ const EVENTOS = [
   { emoji: "🚀", titulo: "Tu emprendimiento despegó", desc: "Un proyecto propio empezó a facturar fuerte este mes.", impacto: (s) => 240000, tipo: "pos" },
   { emoji: "🤑", titulo: "Cliente grande", desc: "Cerraste un contrato importante. Entró un buen adelanto.", impacto: (s) => Math.round(s * 0.11), tipo: "pos" },
   { emoji: "🏅", titulo: "Bono por productividad", desc: "El equipo cumplió los objetivos y repartieron premios.", impacto: (s) => 110000, tipo: "pos" },
+  { emoji: "🧾", titulo: "IVA a favor", desc: "Te quedó saldo a favor de IVA en ARCA. ¡Plata que vuelve!", impacto: (s) => 90000, tipo: "pos" },
+  { emoji: "📋", titulo: "Reintegro de percepciones", desc: "Te devolvieron percepciones que te habían cobrado de más.", impacto: (s) => 70000, tipo: "pos" },
+  { emoji: "🪙", titulo: "Saldo a favor liberado", desc: "ARCA te liberó un crédito fiscal acumulado.", impacto: (s) => 100000, tipo: "pos" },
   // NEGATIVOS
   { emoji: "💥", titulo: "Devaluación del peso", desc: "El gobierno devaluó. Tus pesos perdieron poder adquisitivo.", impacto: (s) => -Math.round(s * 0.12), tipo: "neg" },
   { emoji: "🚨", titulo: "Multa de AFIP", desc: "Te llegó una intimación de AFIP. Facturaste de más sin declarar.", impacto: (s) => -150000, tipo: "neg" },
@@ -78,7 +81,11 @@ const EVENTOS = [
   { emoji: "💳", titulo: "Deuda de tarjeta", desc: "Las cuotas se acumularon. Este mes pagás más de lo esperado.", impacto: (s) => -120000, tipo: "neg" },
   { emoji: "🏢", titulo: "Despido", desc: "Te echaron del trabajo. Cobrás indemnización pero perdés ingreso.", impacto: (s) => -Math.round(s * 0.20), tipo: "neg" },
   { emoji: "🦠", titulo: "Pandemia / Cuarentena", desc: "Restricciones afectaron tu actividad. Ingresos reducidos.", impacto: (s) => -Math.round(s * 0.18), tipo: "neg" },
-  { emoji: "📰", titulo: "Corralito bancario", desc: "El banco frenó los retiros. No podés acceder a tu plata.", impacto: (s) => -Math.round(s * 0.25), tipo: "neg" }
+  { emoji: "📰", titulo: "Corralito bancario", desc: "El banco frenó los retiros. No podés acceder a tu plata.", impacto: (s) => -Math.round(s * 0.25), tipo: "neg" },
+  { emoji: "🧾", titulo: "Pago de IVA", desc: "Liquidaste el IVA del mes y tocó pagarle a ARCA.", impacto: (s) => -110000, tipo: "neg" },
+  { emoji: "📑", titulo: "Ingresos Brutos (IIBB)", desc: "Pagaste Ingresos Brutos provinciales este mes.", impacto: (s) => -80000, tipo: "neg" },
+  { emoji: "🏛️", titulo: "Anticipo de Ganancias", desc: "ARCA te cobró un anticipo del impuesto a las Ganancias.", impacto: (s) => -130000, tipo: "neg" },
+  { emoji: "💼", titulo: "Retención impositiva", desc: "Un cliente te retuvo impuestos al pagarte.", impacto: (s) => -60000, tipo: "neg" }
 ];
 
 // Acciones: precio inicial, volatilidad (cuánto se mueve por turno) y drift (tendencia leve)

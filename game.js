@@ -33,22 +33,14 @@ function cerrarModal(id) {
   document.getElementById(id).style.display = "none";
 }
 
-const CVU_APOYO = "4530000800011940107746";
-const TITULAR_APOYO = "Jeremias Joel Diaz";
+const CAFECITO_URL = "https://cafecito.app/vida-argentina";
 
 function abrirCafecito() {
   document.getElementById("modal-apoyar").style.display = "flex";
 }
 
-function copiarCVU() {
-  const onOk = () => alert("✅ CVU copiado al portapapeles");
-  if (navigator.clipboard && navigator.clipboard.writeText) {
-    navigator.clipboard.writeText(CVU_APOYO).then(onOk).catch(() => {
-      prompt("Copiá el CVU manualmente:", CVU_APOYO);
-    });
-  } else {
-    prompt("Copiá el CVU manualmente:", CVU_APOYO);
-  }
+function abrirCafecitoLink() {
+  window.open(CAFECITO_URL, "_blank");
 }
 
 // ==================== SALA ONLINE ====================
@@ -99,10 +91,22 @@ async function supaUpdateSala(codigo, fields) {
   } catch (e) { return false; }
 }
 
+// Borra salas con más de 12 horas (la regla RLS solo permite borrar viejas)
+async function limpiarSalasViejas() {
+  try {
+    const limite = new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString();
+    await fetch(`${SUPABASE_URL}/rest/v1/salas?created_at=lt.${encodeURIComponent(limite)}`, {
+      method: "DELETE",
+      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` }
+    });
+  } catch (e) {}
+}
+
 async function crearSala() {
   const nombre = document.getElementById("sala-nombre-host").value.trim();
   if (!nombre) { alert("Ingresá tu nombre"); return; }
   if (!hayBaseDeDatos()) { alert("La sala online necesita la base de datos configurada."); return; }
+  limpiarSalasViejas(); // aprovecha para limpiar salas abandonadas
   const avatar = document.getElementById("sala-avatar-host").value;
   const codigo = generarCodigo();
   const miId = uid();
@@ -626,9 +630,16 @@ function actualizarMercadoPanel() {
     </div>`;
   };
 
+  const noti = estado.noticiaActual;
+  const notiHTML = noti ? `<div style="background:#eaf4ff;border:1px solid var(--celeste);border-radius:10px;padding:8px 10px;margin-bottom:10px;">
+      <div style="font-size:12px;font-weight:800;color:var(--azul);">📰 ${noti.emoji} ${noti.titulo}</div>
+      <div style="font-size:11px;color:var(--gris-dark);">${noti.texto}</div>
+    </div>` : "";
+
   panel.innerHTML = `
     <div style="font-weight:800;color:var(--azul);margin-bottom:2px;">📊 Mercado</div>
-    <div style="font-size:11px;color:var(--gris-dark);">Variación del último mes</div>
+    <div style="font-size:11px;color:var(--gris-dark);margin-bottom:8px;">Variación del último mes</div>
+    ${notiHTML}
     <div class="mercado-cat">Acciones</div>
     ${ACCIONES.map(fila).join("")}
     <div class="mercado-cat">FCI — Fondos Comunes</div>
@@ -648,6 +659,27 @@ function actualizarMercado() {
     nuevo = Math.max(Math.round(inst.precio * 0.25), Math.min(Math.round(inst.precio * 6), nuevo));
     estado.precios[inst.nombre] = nuevo;
   });
+}
+
+// Noticia del mes: elige una al azar, aplica su efecto al mercado y la guarda para mostrar
+function aplicarNoticia() {
+  if (!estado.precios) initMercado();
+  const n = NOTICIAS[Math.floor(Math.random() * NOTICIAS.length)];
+  (n.efectos || []).forEach(ef => {
+    let objetivos;
+    if (ef.t === "ACCIONES") objetivos = ACCIONES.map(a => a.nombre);
+    else if (ef.t === "FCI") objetivos = FCI.map(f => f.nombre);
+    else if (ef.t === "TODOS") objetivos = INSTRUMENTOS.map(i => i.nombre);
+    else objetivos = [ef.t];
+    objetivos.forEach(nombre => {
+      const inst = getInstrumento(nombre);
+      if (!inst || estado.precios[nombre] == null) return;
+      let nuevo = Math.round(estado.precios[nombre] * (1 + ef.p));
+      nuevo = Math.max(Math.round(inst.precio * 0.25), Math.min(Math.round(inst.precio * 6), nuevo));
+      estado.precios[nombre] = nuevo;
+    });
+  });
+  estado.noticiaActual = { emoji: n.emoji, titulo: n.titulo, texto: n.texto };
 }
 
 function actualizarHUD() {
@@ -869,8 +901,9 @@ function procesarTurno(dado, auto) {
   // 6) Costo de carrera mientras estudia
   const costoCarrera = (j.enCarrera && j.carrera.costo > 0) ? j.carrera.costo : 0;
 
-  // 7) El mercado se mueve este mes (precios de acciones y FCI)
+  // 7) El mercado se mueve este mes y aparece la noticia del mes
   actualizarMercado();
+  aplicarNoticia();
   actualizarMercadoPanel();
 
   const saldoAntes = j.saldo;
@@ -959,6 +992,14 @@ function mostrarResumenTurno(j) {
       <div style="font-size:44px;">📅</div>
       <div style="font-weight:800;color:var(--azul);font-size:18px;">Mes tranquilo</div>
       <div style="font-size:13px;color:var(--gris-dark);">No hubo eventos este turno</div>
+    </div>`;
+  }
+
+  if (estado.noticiaActual) {
+    html += `<div style="background:#eaf4ff;border:1px solid var(--celeste);border-radius:12px;padding:12px;margin-bottom:14px;">
+      <div style="font-size:12px;font-weight:800;color:var(--azul);letter-spacing:1px;">📰 NOTICIA DEL MES</div>
+      <div style="font-weight:700;color:var(--azul);margin-top:4px;">${estado.noticiaActual.emoji} ${estado.noticiaActual.titulo}</div>
+      <div style="font-size:13px;color:var(--gris-dark);">${estado.noticiaActual.texto}</div>
     </div>`;
   }
 
