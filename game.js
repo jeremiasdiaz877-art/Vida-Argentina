@@ -270,12 +270,19 @@ async function supaGetSalaJuego(codigo) {
   } catch (e) { return null; }
 }
 
-// Empuja el estado actual a la nube (lo hace solo quien está actuando)
-async function pushEstado() {
-  if (!online.activo || !salaInfo) return;
+// Empuja el estado a la nube. Las actualizaciones se ENCOLAN para que lleguen
+// en orden (si no, dos pushes rápidos pueden llegar invertidos y desincronizar el turno).
+let pushChain = Promise.resolve();
+function pushEstado() {
+  if (!online.activo || !salaInfo) return pushChain;
   online.version++;
   estado._v = online.version;
-  await supaUpdateSala(salaInfo.codigo, { estado_juego: estado, version: online.version });
+  const v = online.version;
+  const snapshot = JSON.parse(JSON.stringify(estado)); // foto del estado en este momento
+  const codigo = salaInfo.codigo;
+  pushChain = pushChain.then(() => supaUpdateSala(codigo, { estado_juego: snapshot, version: v }))
+    .catch(() => {});
+  return pushChain;
 }
 
 // Entra a la pantalla de juego en modo online y arranca el sync
@@ -925,15 +932,26 @@ function procesarTurno(dado, auto) {
   j._acumIngresos = (j._acumIngresos || 0) + ingresoSueldo + retornoEmpresa + alquiler;
   j._acumPrestamos = (j._acumPrestamos || 0) + interesPrestamos + amortizacion;
 
-  // Evento aleatorio (60% probabilidad)
+  // El dado decide la suerte: bajo = malo, medio = neutro/chico, alto = bueno
   let evento = null, impactoEvento = 0;
-  if (Math.random() < 0.6) {
-    evento = EVENTOS[Math.floor(Math.random() * EVENTOS.length)];
+  const positivos = EVENTOS.filter(e => e.tipo === "pos");
+  const negativos = EVENTOS.filter(e => e.tipo === "neg");
+  if (dado <= 2) {
+    // 1-2: evento negativo
+    evento = negativos[Math.floor(Math.random() * negativos.length)];
     impactoEvento = evento.impacto(j.saldo);
-    // Los beneficios (eventos positivos) rinden un 10% más
-    if (impactoEvento > 0) impactoEvento = Math.round(impactoEvento * BONUS_BENEFICIOS);
-    j.saldo += impactoEvento;
+  } else if (dado <= 4) {
+    // 3-4: neutro o pequeña oportunidad (50%)
+    if (Math.random() < 0.5) {
+      evento = positivos[Math.floor(Math.random() * positivos.length)];
+      impactoEvento = Math.round(evento.impacto(j.saldo) * 0.4); // oportunidad chica
+    }
+  } else {
+    // 5-6: evento positivo (pleno, con el +10% de beneficios)
+    evento = positivos[Math.floor(Math.random() * positivos.length)];
+    impactoEvento = Math.round(evento.impacto(j.saldo) * BONUS_BENEFICIOS);
   }
+  if (evento) j.saldo += impactoEvento;
 
   // Impuesto a las Ganancias cada 6 meses (escala progresiva)
   let impuesto = 0, baseImpuesto = 0, tasaImp = 0;
