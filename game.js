@@ -1264,8 +1264,8 @@ function mostrarVictoria(ganador) {
   track("partida_ganada", { meses: ganador.meses || 0, patrimonio: calcularPatrimonio(ganador) });
   const sesion = getSesion();
   if (sesion) {
-    // Usuario logueado: se guarda automáticamente bajo su cuenta
-    guardarGanador(sesion.nombre, calcularPatrimonio(ganador), ganador.meses || 0);
+    // Usuario logueado: récord ligado a su cuenta (usuario)
+    guardarGanador(sesion.nombre, calcularPatrimonio(ganador), ganador.meses || 0, sesion.usuario || sesion.nombre);
     mostrarPantallaVictoria(ganador);
   } else {
     document.getElementById("modal-registro").style.display = "flex";
@@ -1277,7 +1277,7 @@ function guardarRegistro() {
   const nombre = (document.getElementById("reg-nombre").value || "").trim() || (estado._ganador ? estado._ganador.nombre : "Anónimo");
   const patrimonio = estado._ganador ? calcularPatrimonio(estado._ganador) : 0;
   const meses = estado._ganador ? (estado._ganador.meses || 0) : 0;
-  guardarGanador(nombre, patrimonio, meses);
+  guardarGanador(nombre, patrimonio, meses, nombre); // invitado: la clave es el nombre
   cerrarModal("modal-registro");
   alert("✅ ¡Quedaste registrado en el Salón de la Fama!");
   mostrarPantallaVictoria(estado._ganador);
@@ -1314,32 +1314,50 @@ function leerRankingLocal() {
   }
 }
 
-function guardarLocal(nombre, patrimonio, meses) {
+// Guarda el récord local del jugador (una entrada por jugador, su mejor tiempo)
+function guardarLocal(nombre, patrimonio, meses, jugadorKey) {
   try {
     const ranking = leerRankingLocal();
-    ranking.push({ nombre, patrimonio, meses: meses || 0, fecha: new Date().toISOString() });
-    ranking.sort((a, b) => (a.meses || 999999) - (b.meses || 999999)); // menos meses = mejor
+    const prev = ranking.find(r => (r.jugador || (r.nombre || "").toLowerCase()) === jugadorKey);
+    if (prev) {
+      if ((meses || 0) < (prev.meses || 999999)) {
+        prev.nombre = nombre; prev.patrimonio = patrimonio; prev.meses = meses || 0; prev.jugador = jugadorKey; prev.fecha = new Date().toISOString();
+      }
+    } else {
+      ranking.push({ nombre, patrimonio, meses: meses || 0, jugador: jugadorKey, fecha: new Date().toISOString() });
+    }
+    ranking.sort((a, b) => (a.meses || 999999) - (b.meses || 999999));
     localStorage.setItem(RANKING_KEY, JSON.stringify(ranking.slice(0, 50)));
   } catch (e) {
     console.warn("No se pudo guardar el ranking local:", e);
   }
 }
 
-// ---- Guardar un ganador (base de datos + respaldo local) ----
-async function guardarGanador(nombre, patrimonio, meses) {
-  guardarLocal(nombre, patrimonio, meses); // respaldo siempre
+// ---- Guardar un ganador: un récord por jugador, se actualiza solo si mejora ----
+async function guardarGanador(nombre, patrimonio, meses, jugadorKey) {
+  jugadorKey = (jugadorKey || nombre || "anon").toLowerCase().trim();
+  meses = meses || 0;
+  guardarLocal(nombre, patrimonio, meses, jugadorKey); // respaldo siempre
   if (!hayBaseDeDatos()) return;
+  const H = { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}`, "Content-Type": "application/json", "Prefer": "return=minimal" };
   try {
-    await fetch(`${SUPABASE_URL}/rest/v1/ranking`, {
-      method: "POST",
-      headers: {
-        "apikey": SUPABASE_KEY,
-        "Authorization": `Bearer ${SUPABASE_KEY}`,
-        "Content-Type": "application/json",
-        "Prefer": "return=minimal"
-      },
-      body: JSON.stringify({ nombre, patrimonio, meses: meses || 0 })
-    });
+    // ¿ya tiene un récord este jugador?
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/ranking?jugador=eq.${encodeURIComponent(jugadorKey)}&select=meses`,
+      { headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}` } });
+    const existentes = res.ok ? await res.json() : [];
+    if (existentes.length > 0) {
+      const mejor = Math.min(...existentes.map(e => e.meses || 999999));
+      if (meses < mejor) {
+        // mejoró su récord: actualizar
+        await fetch(`${SUPABASE_URL}/rest/v1/ranking?jugador=eq.${encodeURIComponent(jugadorKey)}`,
+          { method: "PATCH", headers: H, body: JSON.stringify({ nombre, patrimonio, meses, fecha: new Date().toISOString() }) });
+      }
+      // si no mejoró, no se hace nada
+    } else {
+      // primer récord del jugador
+      await fetch(`${SUPABASE_URL}/rest/v1/ranking`,
+        { method: "POST", headers: H, body: JSON.stringify({ nombre, patrimonio, meses, jugador: jugadorKey }) });
+    }
   } catch (e) {
     console.warn("No se pudo guardar en la base de datos:", e);
   }
@@ -1348,7 +1366,7 @@ async function guardarGanador(nombre, patrimonio, meses) {
 // ---- Leer el ranking global desde la base de datos (ordenado por tiempo) ----
 async function obtenerRankingRemoto() {
   const res = await fetch(
-    `${SUPABASE_URL}/rest/v1/ranking?select=nombre,patrimonio,meses,fecha&meses=gt.0&order=meses.asc&limit=50`,
+    `${SUPABASE_URL}/rest/v1/ranking?select=nombre,patrimonio,meses,jugador,fecha&meses=gt.0&order=meses.asc&limit=50`,
     { headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}` } }
   );
   if (!res.ok) throw new Error("Error al leer el ranking");
@@ -1368,6 +1386,14 @@ function renderRanking(ranking, esGlobal) {
   const cont = document.getElementById("ranking-contenido");
   const posEmojis = ["🥇", "🥈", "🥉"];
   ranking = (ranking || []).filter(g => (g.meses || 0) > 0).sort((a, b) => a.meses - b.meses);
+  // Una entrada por jugador: nos quedamos con su mejor tiempo (el primero, ya ordenado)
+  const vistos = new Set();
+  ranking = ranking.filter(g => {
+    const clave = (g.jugador || g.nombre || "").trim().toLowerCase();
+    if (vistos.has(clave)) return false;
+    vistos.add(clave);
+    return true;
+  });
   if (ranking.length === 0) {
     cont.innerHTML = `<div style="text-align:center;color:var(--gris-dark);padding:24px 8px;">
       <div style="font-size:44px;margin-bottom:8px;">🏅</div>
