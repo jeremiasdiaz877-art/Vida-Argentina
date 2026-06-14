@@ -104,7 +104,20 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background: #f0f4f8; min-
 .back-btn { display: flex; align-items: center; gap: 6px; color: var(--azul-med); font-size: 14px; cursor: pointer; margin-bottom: 16px; border: none; background: none; padding: 0; }
 
 /* TABLERO DE JUEGO */
-#pantalla-juego { background: #f0f4f8; }
+#pantalla-juego { background: #f0f4f8; position: relative; }
+/* Imagen de fondo (guardá tu imagen como fondo.jpg en la carpeta del juego) */
+#pantalla-juego::before {
+  content: "";
+  position: fixed; inset: 0; z-index: 0;
+  background: url("fondo.jpg") center center / cover no-repeat;
+  filter: blur(2px) brightness(0.92);
+}
+#pantalla-juego::after {
+  content: "";
+  position: fixed; inset: 0; z-index: 0;
+  background: rgba(240, 244, 248, 0.80); /* velo claro para que se lea todo */
+}
+#pantalla-juego > * { position: relative; z-index: 1; }
 .juego-header { background: var(--azul); padding: 12px 16px; display: flex; gap: 8px; overflow-x: auto; }
 .jugador-hud { background: rgba(255,255,255,0.1); border-radius: 10px; padding: 10px 14px; min-width: 120px; cursor: pointer; border: 2px solid transparent; transition: all 0.2s; flex-shrink: 0; }
 .jugador-hud.activo { background: rgba(255,255,255,0.25); border-color: var(--amarillo); }
@@ -124,10 +137,17 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background: #f0f4f8; min-
   .mercado-panel { display: block; width: 100%; max-width: 480px; max-height: 320px; align-self: stretch; }
 }
 .dado-container { text-align: center; margin-bottom: 24px; }
-.dado { font-size: 80px; cursor: pointer; transition: transform 0.2s; display: inline-block; }
+.dado { font-size: 84px; cursor: pointer; transition: transform 0.2s; display: inline-block; line-height: 1; }
 .dado:hover { transform: scale(1.05); }
-.dado.girando { animation: girar 0.5s ease-out; }
-@keyframes girar { 0% { transform: rotate(0deg) scale(1); } 50% { transform: rotate(180deg) scale(1.2); } 100% { transform: rotate(360deg) scale(1); } }
+.dado.girando { animation: girar 0.4s linear infinite; }
+@keyframes girar { from { transform: rotate(0deg) scale(1.15); } to { transform: rotate(360deg) scale(1.15); } }
+.dado.cayo { animation: caer 0.55s cubic-bezier(0.2, 1.2, 0.4, 1); }
+@keyframes caer {
+  0%   { transform: translateY(-130px) scale(1.4) rotate(-18deg); opacity: 0.5; }
+  55%  { transform: translateY(10px) scale(0.9) rotate(4deg); opacity: 1; }
+  75%  { transform: translateY(-5px) scale(1.04); }
+  100% { transform: translateY(0) scale(1) rotate(0); }
+}
 .turno-info { text-align: center; margin-bottom: 20px; }
 .turno-jugador { font-size: 20px; font-weight: 800; color: var(--azul); display: flex; align-items: center; gap: 8px; justify-content: center; }
 .turno-ronda { font-size: 13px; color: var(--gris-dark); margin-top: 4px; }

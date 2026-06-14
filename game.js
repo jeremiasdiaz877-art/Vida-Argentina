@@ -794,8 +794,11 @@ function actualizarTurno() {
   document.getElementById("btn-tirar").style.display = "flex";
   document.getElementById("btn-siguiente").style.display = "none";
   document.getElementById("dado-display").textContent = "⚀";
+  const resEl = document.getElementById("dado-resultado");
+  if (resEl) resEl.innerHTML = "";
   actualizarMercadoPanel();
   turnoTirado = false;
+  tirando = false;
   iniciarTimerTurno();
 }
 
@@ -850,18 +853,42 @@ function turnoAgotado() {
   }
 }
 
+let tirando = false;
 function tirarDado() {
-  if (!esMiTurno()) return; // online: solo actúa el jugador del turno
+  if (!esMiTurno() || tirando) return; // online: solo actúa el jugador del turno
+  tirando = true;
   const dado = document.getElementById("dado-display");
-  dado.classList.add("girando");
+  const res = document.getElementById("dado-resultado");
   document.getElementById("btn-tirar").style.display = "none";
+  if (res) res.innerHTML = "";
 
-  setTimeout(() => {
-    dado.classList.remove("girando");
-    const resultado = Math.floor(Math.random() * 6) + 1;
-    dado.textContent = CARAS_DADO[resultado - 1];
-    procesarTurno(resultado);
-  }, 600);
+  const resultado = Math.floor(Math.random() * 6) + 1;
+  dado.classList.add("girando");
+
+  // El dado "rueda" cambiando de cara ~1 segundo
+  let ticks = 0;
+  const giro = setInterval(() => {
+    dado.textContent = CARAS_DADO[Math.floor(Math.random() * 6)];
+    if (++ticks >= 12) {
+      clearInterval(giro);
+      dado.classList.remove("girando");
+      dado.textContent = CARAS_DADO[resultado - 1];
+      dado.classList.add("cayo");
+      setTimeout(() => dado.classList.remove("cayo"), 400);
+
+      // Mostrar el número y la pista de suerte
+      if (res) {
+        let txt, color;
+        if (resultado <= 2) { txt = "😬 Mala suerte..."; color = "var(--rojo)"; }
+        else if (resultado <= 4) { txt = "😐 Mes neutro"; color = "var(--gris-dark)"; }
+        else { txt = "🤑 ¡Buenísimo!"; color = "var(--verde)"; }
+        res.innerHTML = `<div style="font-size:20px;font-weight:800;color:${color};">Sacaste un ${resultado}</div><div style="font-size:13px;color:${color};">${txt}</div>`;
+      }
+
+      // Recién ahí (tras leer el número) aparece el evento
+      setTimeout(() => { tirando = false; procesarTurno(resultado); }, 1300);
+    }
+  }, 85);
 }
 
 function procesarTurno(dado, auto) {
