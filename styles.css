@@ -104,20 +104,7 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background: #f0f4f8; min-
 .back-btn { display: flex; align-items: center; gap: 6px; color: var(--azul-med); font-size: 14px; cursor: pointer; margin-bottom: 16px; border: none; background: none; padding: 0; }
 
 /* TABLERO DE JUEGO */
-#pantalla-juego { background: #f0f4f8; position: relative; }
-/* Imagen de fondo (guardá tu imagen como fondo.jpg en la carpeta del juego) */
-#pantalla-juego::before {
-  content: "";
-  position: fixed; inset: 0; z-index: 0;
-  background: url("fondo.jpg") center center / cover no-repeat;
-  filter: blur(2px) brightness(0.92);
-}
-#pantalla-juego::after {
-  content: "";
-  position: fixed; inset: 0; z-index: 0;
-  background: rgba(240, 244, 248, 0.55); /* velo claro para que se lea todo */
-}
-#pantalla-juego > * { position: relative; z-index: 1; }
+#pantalla-juego { background: #f0f4f8; }
 .juego-header { background: var(--azul); padding: 12px 16px; display: flex; gap: 8px; overflow-x: auto; }
 .jugador-hud { background: rgba(255,255,255,0.1); border-radius: 10px; padding: 10px 14px; min-width: 120px; cursor: pointer; border: 2px solid transparent; transition: all 0.2s; flex-shrink: 0; }
 .jugador-hud.activo { background: rgba(255,255,255,0.25); border-color: var(--amarillo); }
@@ -137,15 +124,7 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background: #f0f4f8; min-
   .mercado-panel { display: block; width: 100%; max-width: 480px; max-height: 320px; align-self: stretch; }
 }
 .dado-container { text-align: center; margin-bottom: 24px; }
-.dado {
-  font-size: 76px; cursor: pointer; transition: transform 0.2s; display: inline-flex;
-  align-items: center; justify-content: center; line-height: 1;
-  width: 120px; height: 120px;
-  background: rgba(255, 255, 255, 0.95);
-  border-radius: 24px;
-  box-shadow: 0 10px 26px rgba(26, 58, 107, 0.28);
-  color: var(--azul);
-}
+.dado { font-size: 84px; cursor: pointer; transition: transform 0.2s; display: inline-block; line-height: 1; }
 .dado:hover { transform: scale(1.05); }
 .dado.girando { animation: girar 0.4s linear infinite; }
 @keyframes girar { from { transform: rotate(0deg) scale(1.15); } to { transform: rotate(360deg) scale(1.15); } }
@@ -159,10 +138,6 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background: #f0f4f8; min-
 .turno-info { text-align: center; margin-bottom: 20px; }
 .turno-jugador { font-size: 20px; font-weight: 800; color: var(--azul); display: flex; align-items: center; gap: 8px; justify-content: center; }
 .turno-ronda { font-size: 13px; color: var(--gris-dark); margin-top: 4px; }
-/* Halo blanco para que el texto del centro se lea sobre el fondo */
-.turno-jugador, .turno-ronda, #turno-timer, #dado-resultado {
-  text-shadow: 0 1px 4px rgba(255,255,255,0.95), 0 0 8px rgba(255,255,255,0.85);
-}
 
 .juego-footer { background: white; border-top: 1px solid var(--gris-med); padding: 12px; display: flex; gap: 8px; overflow-x: auto; }
 .footer-btn { padding: 10px 14px; border: 1.5px solid var(--gris-med); border-radius: 10px; background: white; cursor: pointer; font-size: 12px; font-weight: 600; color: var(--azul); white-space: nowrap; transition: all 0.2s; display: flex; flex-direction: column; align-items: center; gap: 2px; flex-shrink: 0; }
