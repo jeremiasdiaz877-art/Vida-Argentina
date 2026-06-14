@@ -124,7 +124,16 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background: #f0f4f8; min-
   .mercado-panel { display: block; width: 100%; max-width: 480px; max-height: 320px; align-self: stretch; }
 }
 .dado-container { text-align: center; margin-bottom: 24px; }
-.dado { font-size: 84px; cursor: pointer; transition: transform 0.2s; display: inline-block; line-height: 1; }
+.dado {
+  font-size: 74px; cursor: pointer; transition: transform 0.2s;
+  display: inline-flex; align-items: center; justify-content: center; line-height: 1;
+  width: 132px; height: 132px;
+  background: linear-gradient(145deg, #f6edda, #e3cfa6);
+  border: 3px solid #cdb487;
+  border-radius: 26px;
+  box-shadow: inset 0 3px 10px rgba(120, 90, 50, 0.25), 0 8px 22px rgba(80, 55, 20, 0.28);
+  color: #5a4a2a;
+}
 .dado:hover { transform: scale(1.05); }
 .dado.girando { animation: girar 0.4s linear infinite; }
 @keyframes girar { from { transform: rotate(0deg) scale(1.15); } to { transform: rotate(360deg) scale(1.15); } }
@@ -138,6 +147,17 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background: #f0f4f8; min-
 .turno-info { text-align: center; margin-bottom: 20px; }
 .turno-jugador { font-size: 20px; font-weight: 800; color: var(--azul); display: flex; align-items: center; gap: 8px; justify-content: center; }
 .turno-ronda { font-size: 13px; color: var(--gris-dark); margin-top: 4px; }
+
+/* Botón "Tirar Dado" tipo placa dorada (CTA principal) */
+#btn-tirar {
+  background: linear-gradient(145deg, #f9ca24, #d4a017);
+  color: var(--azul);
+  border: 2px solid #b8860b;
+  font-size: 18px;
+  letter-spacing: 0.5px;
+  box-shadow: 0 6px 16px rgba(212, 160, 23, 0.45);
+}
+#btn-tirar:hover { background: linear-gradient(145deg, #ffd43b, #e0a800); transform: translateY(-1px); }
 
 .juego-footer { background: white; border-top: 1px solid var(--gris-med); padding: 12px; display: flex; gap: 8px; overflow-x: auto; }
 .footer-btn { padding: 10px 14px; border: 1.5px solid var(--gris-med); border-radius: 10px; background: white; cursor: pointer; font-size: 12px; font-weight: 600; color: var(--azul); white-space: nowrap; transition: all 0.2s; display: flex; flex-direction: column; align-items: center; gap: 2px; flex-shrink: 0; }
