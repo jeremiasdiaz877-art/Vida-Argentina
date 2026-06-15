@@ -65,6 +65,12 @@ const EVENTOS = [
   { emoji: "🧾", titulo: "IVA a favor", desc: "Te quedó saldo a favor de IVA en ARCA. ¡Plata que vuelve!", impacto: (s) => 90000, tipo: "pos" },
   { emoji: "📋", titulo: "Reintegro de percepciones", desc: "Te devolvieron percepciones que te habían cobrado de más.", impacto: (s) => 70000, tipo: "pos" },
   { emoji: "🪙", titulo: "Saldo a favor liberado", desc: "ARCA te liberó un crédito fiscal acumulado.", impacto: (s) => 100000, tipo: "pos" },
+  { emoji: "🏆", titulo: "¡La Scaloneta salió campeón!", desc: "El país festeja y la gente sale a consumir. Tu negocio vendió como nunca.", impacto: (s) => 200000, tipo: "pos" },
+  { emoji: "🐮", titulo: "Subió el precio de la hacienda", desc: "El campo liquidó a buen precio y la plata circuló. Te tocó una parte.", impacto: (s) => 180000, tipo: "pos" },
+  { emoji: "🌾", titulo: "Cosecha récord de soja", desc: "El agro tuvo una campaña histórica y entraron dólares. La economía respiró.", impacto: (s) => 250000, tipo: "pos" },
+  { emoji: "🧉", titulo: "Boom de las exportaciones de yerba", desc: "Tu producto pegó afuera. Las ventas al exterior dejaron buena diferencia.", impacto: (s) => 150000, tipo: "pos" },
+  { emoji: "🍷", titulo: "Exportaste vino mendocino", desc: "Un importador europeo te hizo un pedido grande. Cobraste en euros.", impacto: (s) => 220000, tipo: "pos" },
+  { emoji: "⚽", titulo: "Vendiste la camiseta de la Selección", desc: "Furor por la albiceleste. Volaron de las góndolas y facturaste fuerte.", impacto: (s) => 160000, tipo: "pos" },
   // NEGATIVOS
   { emoji: "💥", titulo: "Devaluación del peso", desc: "El gobierno devaluó. Tus pesos perdieron poder adquisitivo.", impacto: (s) => -Math.round(s * 0.12), tipo: "neg" },
   { emoji: "🚨", titulo: "Multa de AFIP", desc: "Te llegó una intimación de AFIP. Facturaste de más sin declarar.", impacto: (s) => -150000, tipo: "neg" },
@@ -85,7 +91,11 @@ const EVENTOS = [
   { emoji: "🧾", titulo: "Pago de IVA", desc: "Liquidaste el IVA del mes y tocó pagarle a ARCA.", impacto: (s) => -110000, tipo: "neg" },
   { emoji: "📑", titulo: "Ingresos Brutos (IIBB)", desc: "Pagaste Ingresos Brutos provinciales este mes.", impacto: (s) => -80000, tipo: "neg" },
   { emoji: "🏛️", titulo: "Anticipo de Ganancias", desc: "ARCA te cobró un anticipo del impuesto a las Ganancias.", impacto: (s) => -130000, tipo: "neg" },
-  { emoji: "💼", titulo: "Retención impositiva", desc: "Un cliente te retuvo impuestos al pagarte.", impacto: (s) => -60000, tipo: "neg" }
+  { emoji: "💼", titulo: "Retención impositiva", desc: "Un cliente te retuvo impuestos al pagarte.", impacto: (s) => -60000, tipo: "neg" },
+  { emoji: "🚗", titulo: "Te compraste un auto", desc: "Decidiste darte el gusto y sacar un 0km. Los ahorros volaron.", impacto: (s) => -5000000, tipo: "neg" },
+  { emoji: "✈️", titulo: "Viaje al exterior", desc: "Te fuiste de vacaciones a Miami/Europa. Tarjetazo y a pagar.", impacto: (s) => -3500000, tipo: "neg" },
+  { emoji: "🔧", titulo: "Se rompió el auto", desc: "Fuiste al mecánico y te arrancaron la cabeza con los repuestos.", impacto: (s) => -350000, tipo: "neg" },
+  { emoji: "📱", titulo: "Nuevo iPhone", desc: "Te tentaste y cambiaste el celular por el último modelo.", impacto: (s) => -1500000, tipo: "neg" }
 ];
 
 // Acciones: precio inicial, volatilidad (cuánto se mueve por turno) y drift (tendencia leve)
@@ -93,39 +103,40 @@ const ACCIONES = [
   { nombre: "YPF", emoji: "⛽", tipo: "accion", precio: 150000, volatilidad: 0.15, drift: 0.008 },
   { nombre: "Banco Galicia", emoji: "🏦", tipo: "accion", precio: 120000, volatilidad: 0.12, drift: 0.007 },
   { nombre: "Mercado Libre", emoji: "🛒", tipo: "accion", precio: 400000, volatilidad: 0.20, drift: 0.012 },
-  { nombre: "Grupo Clarín", emoji: "📰", tipo: "accion", precio: 80000, volatilidad: 0.10, drift: 0.005 },
   { nombre: "Loma Negra", emoji: "🏗️", tipo: "accion", precio: 100000, volatilidad: 0.11, drift: 0.006 },
-  { nombre: "Pampa Energía", emoji: "⚡", tipo: "accion", precio: 180000, volatilidad: 0.16, drift: 0.009 }
+  { nombre: "CEDEAR S&P 500", emoji: "🇺🇸", tipo: "accion", precio: 35000, volatilidad: 0.08, drift: 0.015 },
+  { nombre: "Bitcoin (Cripto)", emoji: "₿", tipo: "accion", precio: 600000, volatilidad: 0.35, drift: 0.025 }
 ];
 
 // FCI (Fondos Comunes de Inversión): menos volátiles que las acciones, con tendencia positiva
 const FCI = [
   { nombre: "FCI Money Market", emoji: "💵", tipo: "fci", precio: 100000, volatilidad: 0.02, drift: 0.006 },
-  { nombre: "FCI Renta Fija", emoji: "📃", tipo: "fci", precio: 100000, volatilidad: 0.04, drift: 0.008 },
   { nombre: "FCI Renta Variable", emoji: "📊", tipo: "fci", precio: 150000, volatilidad: 0.09, drift: 0.011 },
-  { nombre: "FCI Dólar (Cobertura)", emoji: "💲", tipo: "fci", precio: 120000, volatilidad: 0.06, drift: 0.010 }
+  { nombre: "FCI Dólar MEP", emoji: "💲", tipo: "fci", precio: 120000, volatilidad: 0.06, drift: 0.010 },
+  { nombre: "Plazo Fijo Tradicional", emoji: "⏳", tipo: "fci", precio: 100000, volatilidad: 0.00, drift: 0.035 } // Rinde 3.5% fijo mensual sin riesgo
 ];
 
 // Lista combinada de instrumentos del mercado
 const INSTRUMENTOS = ACCIONES.concat(FCI);
 
 const EMPRESAS = [
-  { nombre: "Kiosco", emoji: "🏪", precio: 1500000, retornoPorTurno: 28000, descripcion: "Negocio simple y estable" },
-  { nombre: "Panadería", emoji: "🥐", precio: 2400000, retornoPorTurno: 45500, descripcion: "Demanda constante" },
-  { nombre: "Consultora", emoji: "💼", precio: 3600000, retornoPorTurno: 70000, descripcion: "Clientes corporativos" },
-  { nombre: "Farmacia", emoji: "💊", precio: 6000000, retornoPorTurno: 112000, descripcion: "Alta rentabilidad" },
-  { nombre: "Franquicia de comida", emoji: "🍔", precio: 10500000, retornoPorTurno: 196000, descripcion: "Marca reconocida" },
-  { nombre: "Empresa de tecnología", emoji: "💻", precio: 18000000, retornoPorTurno: 350000, descripcion: "Alto crecimiento" },
-  { nombre: "Shopping", emoji: "🏬", precio: 120000000, retornoPorTurno: 2600000, descripcion: "Centro comercial gigante" }
+  { nombre: "Kiosco", emoji: "🏪", precio: 1500000, retornoPorTurno: 75000, descripcion: "Negocio simple. Rentabilidad: 5%/mes" },
+  { nombre: "Estudio Contable y Admin", emoji: "📋", precio: 2500000, retornoPorTurno: 137500, descripcion: "Gestión de PyMEs. Rentabilidad: 5.5%/mes" },
+  { nombre: "Tienda de Calzado Deportivo", emoji: "👟", precio: 4000000, retornoPorTurno: 240000, descripcion: "Retail físico y online. Rentabilidad: 6%/mes" },
+  { nombre: "Franquicia de comida", emoji: "🍔", precio: 10500000, retornoPorTurno: 682500, descripcion: "Marca reconocida. Rentabilidad: 6.5%/mes" },
+  { nombre: "Empresa de tecnología", emoji: "💻", precio: 18000000, retornoPorTurno: 1260000, descripcion: "Alto margen. Rentabilidad: 7%/mes" },
+  { nombre: "Constructora", emoji: "🏗️", precio: 45000000, retornoPorTurno: 3375000, descripcion: "Obras privadas. Rentabilidad: 7.5%/mes" },
+  { nombre: "Empresa Agropecuaria", emoji: "🚜", precio: 80000000, retornoPorTurno: 6400000, descripcion: "Exportación pura. Rentabilidad: 8%/mes" }
 ];
 
 const PROPIEDADES = [
-  { nombre: "Departamento 1 amb.", emoji: "🏠", precio: 2000000, alquilerPorTurno: 80000, descripcion: "Centro de ciudad" },
-  { nombre: "Casa en barrio", emoji: "🏡", precio: 3500000, alquilerPorTurno: 130000, descripcion: "Tranquila y amplia" },
-  { nombre: "Local comercial", emoji: "🏪", precio: 5000000, alquilerPorTurno: 200000, descripcion: "Zona de alto tráfico" },
-  { nombre: "PH con jardín", emoji: "🏘️", precio: 7000000, alquilerPorTurno: 280000, descripcion: "Lujo accesible" },
-  { nombre: "Edificio de departamentos", emoji: "🏢", precio: 20000000, alquilerPorTurno: 800000, descripcion: "Inversión grande" },
-  { nombre: "Super Edificio", emoji: "🏙️", precio: 140000000, alquilerPorTurno: 6000000, descripcion: "Torre premium de lujo" }
+  { nombre: "Cochera céntrica", emoji: "🅿️", precio: 1500000, alquilerPorTurno: 30000, descripcion: "Poco mantenimiento" },
+  { nombre: "Departamento 1 amb.", emoji: "🏠", precio: 4000000, alquilerPorTurno: 60000, descripcion: "Alquiler tradicional" },
+  { nombre: "Local comercial", emoji: "🏪", precio: 8000000, alquilerPorTurno: 140000, descripcion: "Zona de alto tráfico" },
+  { nombre: "Lote en barrio privado", emoji: "🌳", precio: 15000000, alquilerPorTurno: 180000, descripcion: "Inversión a largo plazo" },
+  { nombre: "PH con jardín", emoji: "🏘️", precio: 25000000, alquilerPorTurno: 375000, descripcion: "Lujo accesible" },
+  { nombre: "Campo agrícola", emoji: "🌾", precio: 90000000, alquilerPorTurno: 1350000, descripcion: "Arrendamiento en dólares" },
+  { nombre: "Torre Premium", emoji: "🏙️", precio: 200000000, alquilerPorTurno: 3000000, descripcion: "Inversión gigante" }
 ];
 
 // Cada banco tiene su propia tasa mensual, monto máximo, plazos y beneficio

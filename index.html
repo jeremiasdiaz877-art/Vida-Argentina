@@ -38,7 +38,14 @@
     <button class="btn btn-primary" onclick="irAJugadores()">👥 Jugar Local — Gratis</button>
     <button class="btn btn-secondary" onclick="irASala()">🌐 Crear / Unirse a Sala</button>
     <button class="btn btn-secondary" onclick="abrirRanking()">🏆 Salón de la Fama</button>
-    <button class="btn btn-secondary" id="btn-auth" onclick="abrirAuth()">🔐 Iniciar sesión / Registrarse</button>
+    <div class="ranking-promo-card" onclick="abrirAuth()" id="promo-registro">
+      <div class="promo-icon">🏆</div>
+      <div class="promo-text">
+        <div class="promo-title">Entrá al Salón de la Fama</div>
+        <div class="promo-desc">Registrate gratis para guardar tus récords y competir en el ranking global.</div>
+      </div>
+      <div class="promo-arrow">→</div>
+    </div>
     <button class="btn" style="background:#eaf4ff;color:var(--azul);margin-top:4px;" onclick="abrirCafecito()">❤️ Apoyar el Proyecto</button>
   </div>
   <div id="auth-estado" style="color:var(--gris-dark);font-size:13px;margin-top:14px;">Jugás como invitado</div>

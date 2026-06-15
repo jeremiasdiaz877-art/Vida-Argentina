@@ -927,9 +927,26 @@ function procesarTurno(dado, auto) {
     ingresoSueldo = Math.round(j.sueldo * 0.3);
   }
 
-  // 2) Retorno de empresas
+  // 2) Retorno de empresas (CON RIESGO: una empresa puede tener un mal mes o uno flojo)
   let retornoEmpresa = 0;
-  j.empresas.forEach(e => { retornoEmpresa += e.retornoPorTurno; });
+  let empresasRiesgo = []; // avisos de empresas con problemas este mes
+  j.empresas.forEach(e => {
+    const suerte = Math.random();
+    if (suerte < 0.10) {
+      // Mal mes (10%): en vez de ganar, la empresa genera pérdida (entre 0.8x y 1.5x el retorno)
+      const perdida = Math.round(e.retornoPorTurno * (0.8 + Math.random() * 0.7));
+      retornoEmpresa -= perdida;
+      empresasRiesgo.push({ nombre: e.nombre, emoji: e.emoji, tipo: "perdida", monto: -perdida });
+    } else if (suerte < 0.25) {
+      // Mes flojo (15%): rinde solo el 40%
+      const flojo = Math.round(e.retornoPorTurno * 0.4);
+      retornoEmpresa += flojo;
+      empresasRiesgo.push({ nombre: e.nombre, emoji: e.emoji, tipo: "flojo", monto: flojo });
+    } else {
+      // Mes normal (75%)
+      retornoEmpresa += e.retornoPorTurno;
+    }
+  });
 
   // 3) Alquiler de propiedades (NO entra en la base de Ganancias)
   let alquiler = 0;
@@ -1010,7 +1027,7 @@ function procesarTurno(dado, auto) {
 
   // Guardar el resumen del turno para mostrarlo
   j._resumen = {
-    saldoAntes, ingresoSueldo, retornoEmpresa, alquiler,
+    saldoAntes, ingresoSueldo, retornoEmpresa, alquiler, empresasRiesgo,
     gastosFijos, interesPrestamos, amortizacion, costoCarrera,
     evento, impactoEvento, impuesto, baseImpuesto, tasaImp, saldoDespues: j.saldo
   };
@@ -1059,6 +1076,19 @@ function mostrarResumenTurno(j) {
     </div>`;
   }
 
+  if (r.empresasRiesgo && r.empresasRiesgo.length) {
+    const filas = r.empresasRiesgo.map(er => {
+      const txt = er.tipo === "perdida"
+        ? `tuvo un <strong style="color:var(--rojo);">mal mes</strong> (${fmt(er.monto)})`
+        : `tuvo un <strong style="color:var(--naranja);">mes flojo</strong> (+${fmt(er.monto)})`;
+      return `<div style="margin-top:4px;">${er.emoji} <strong>${er.nombre}</strong> ${txt}</div>`;
+    }).join("");
+    html += `<div style="background:#fff3cd;border:1px solid #ffc107;border-radius:12px;padding:12px;margin-bottom:14px;font-size:13px;color:var(--gris-dark);">
+      <div style="font-size:12px;font-weight:800;color:#b8860b;letter-spacing:1px;">🏢 TUS EMPRESAS ESTE MES</div>
+      ${filas}
+    </div>`;
+  }
+
   if (estado.noticiaActual) {
     html += `<div style="background:#eaf4ff;border:1px solid var(--celeste);border-radius:12px;padding:12px;margin-bottom:14px;">
       <div style="font-size:12px;font-weight:800;color:var(--azul);letter-spacing:1px;">📰 NOTICIA DEL MES</div>
@@ -1079,7 +1109,7 @@ function mostrarResumenTurno(j) {
     <p style="font-weight:700;font-size:13px;margin-bottom:8px;color:var(--azul);">📊 Resumen del turno</p>
     <table style="width:100%;font-size:14px;">
       ${linea("💵 Sueldo", r.ingresoSueldo, false)}
-      ${linea("🏢 Empresas", r.retornoEmpresa, false)}
+      ${r.retornoEmpresa !== 0 ? linea("🏢 Empresas", Math.abs(r.retornoEmpresa), r.retornoEmpresa < 0) : ""}
       ${linea("🏠 Alquileres", r.alquiler, false)}
       ${linea("🏠 Gastos fijos", r.gastosFijos, true)}
       ${linea("🏦 Interés préstamos (1.5%)", r.interesPrestamos, true)}
@@ -1508,15 +1538,14 @@ function esEmailValido(e) {
 
 function actualizarUIAuth() {
   const cont = document.getElementById("auth-estado");
-  const btn = document.getElementById("btn-auth");
+  const promo = document.getElementById("promo-registro"); // la tarjeta destacada del inicio
   const s = getSesion();
-  if (!cont) return;
   if (s) {
-    cont.innerHTML = `👤 Sesión de <strong>${s.nombre}</strong> · <a href="#" onclick="cerrarSesion();return false;" style="color:var(--azul-claro);font-weight:600;">Cerrar sesión</a>`;
-    if (btn) btn.style.display = "none";
+    if (cont) cont.innerHTML = `👤 Sesión de <strong>${s.nombre}</strong> · <a href="#" onclick="cerrarSesion();return false;" style="color:var(--azul-claro);font-weight:600;">Cerrar sesión</a>`;
+    if (promo) promo.style.display = "none"; // ya está registrado: ocultamos la invitación
   } else {
-    cont.innerHTML = `Jugás como invitado`;
-    if (btn) btn.style.display = "flex";
+    if (cont) cont.innerHTML = `Jugás como invitado`;
+    if (promo) promo.style.display = "flex"; // invitado: mostramos la invitación
   }
 }
 
