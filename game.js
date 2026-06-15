@@ -229,6 +229,8 @@ async function iniciarSalaOnline() {
   estado.setupPaso = 0;
   estado.provinciaSeleccionada = null;
   estado.faseOnline = "setup";
+  estado.terminado = null;
+  partidaTerminada = false;
   online.activo = true;
   online.miIndice = estado.jugadores.findIndex(p => p.id === salaInfo.miId);
   online.version = 1;
@@ -297,6 +299,20 @@ function entrarJuegoOnline() {
     if ((sala.version || 0) > online.version) {
       online.version = sala.version;
       estado = sala.estado_juego;
+      // ¿La partida terminó? (alguien ganó o quebró) → fin para todos
+      if (estado.terminado && !partidaTerminada) {
+        partidaTerminada = true;
+        if (intervalSync) clearInterval(intervalSync);
+        intervalSync = null;
+        detenerTimerTurno();
+        if (estado.terminado.tipo === "gameover") {
+          mostrarGameOver();
+        } else {
+          const ganador = estado.jugadores.find(p => p.id === estado.terminado.ganadorId) || estado.jugadores[0];
+          mostrarPantallaVictoria(ganador);
+        }
+        return;
+      }
       renderOnline();
     }
   }, 1500);
@@ -599,6 +615,8 @@ function seleccionarCarrera(idx) {
 function iniciarJuego() {
   estado.jugadorActual = 0;
   estado.ronda = 1;
+  estado.terminado = null;
+  partidaTerminada = false;
   initMercado();
   track("partida_iniciada", { modo: "local", jugadores: estado.jugadores.length });
   mostrarPantalla("pantalla-juego");
@@ -876,17 +894,13 @@ function tirarDado() {
       dado.classList.add("cayo");
       setTimeout(() => dado.classList.remove("cayo"), 400);
 
-      // Mostrar el número y la pista de suerte
+      // Mostrar solo el número que salió
       if (res) {
-        let txt, color;
-        if (resultado <= 2) { txt = "😬 Mala suerte..."; color = "var(--rojo)"; }
-        else if (resultado <= 4) { txt = "😐 Mes neutro"; color = "var(--gris-dark)"; }
-        else { txt = "🤑 ¡Buenísimo!"; color = "var(--verde)"; }
-        res.innerHTML = `<div style="font-size:20px;font-weight:800;color:${color};">Sacaste un ${resultado}</div><div style="font-size:13px;color:${color};">${txt}</div>`;
+        res.innerHTML = `<div style="font-size:20px;font-weight:800;color:var(--azul);">Sacaste un ${resultado}</div>`;
       }
 
       // Recién ahí (tras leer el número) aparece el evento
-      setTimeout(() => { tirando = false; procesarTurno(resultado); }, 1300);
+      setTimeout(() => { tirando = false; procesarTurno(resultado); }, 1100);
     }
   }, 85);
 }
@@ -1042,12 +1056,6 @@ function mostrarResumenTurno(j) {
       <div class="evento-impacto ${r.impactoEvento >= 0 ? "impacto-pos" : "impacto-neg"}">
         ${r.impactoEvento >= 0 ? "+" : ""}${fmt(r.impactoEvento)}
       </div>
-    </div>`;
-  } else {
-    html += `<div style="text-align:center;margin-bottom:16px;">
-      <div style="font-size:44px;">📅</div>
-      <div style="font-weight:800;color:var(--azul);font-size:18px;">Mes tranquilo</div>
-      <div style="font-size:13px;color:var(--gris-dark);">No hubo eventos este turno</div>
     </div>`;
   }
 
@@ -1211,7 +1219,7 @@ function continuarDespuesQuiebra() {
 function verificarVictoria(j) {
   const patrimonio = calcularPatrimonio(j);
   if (patrimonio >= META_VICTORIA) {
-    mostrarVictoria(j);
+    finalizarPartida("victoria", j);
     return;
   }
 
@@ -1219,18 +1227,32 @@ function verificarVictoria(j) {
 
   // Nadie queda en pie (puede pasar en modo 1 jugador)
   if (vivos.length === 0) {
-    mostrarGameOver();
+    finalizarPartida("gameover", null);
     return;
   }
 
   // En multijugador, gana el último que queda en pie
   if (estado.jugadores.length > 1 && vivos.length === 1) {
-    mostrarVictoria(vivos[0]);
+    finalizarPartida("victoria", vivos[0]);
     return;
   }
 
   actualizarHUD();
   document.getElementById("btn-siguiente").style.display = "flex";
+}
+
+// Termina la partida (en online avisa a todos los dispositivos)
+let partidaTerminada = false;
+function finalizarPartida(tipo, ganador) {
+  partidaTerminada = true;
+  if (online.activo) {
+    estado.terminado = { tipo: tipo, ganadorId: ganador ? ganador.id : null };
+    pushEstado(); // que los demás se enteren del fin
+    if (intervalSync) clearInterval(intervalSync);
+    intervalSync = null;
+  }
+  if (tipo === "gameover") mostrarGameOver();
+  else mostrarVictoria(ganador);
 }
 
 function mostrarGameOver() {
@@ -1590,6 +1612,7 @@ function mostrarPantallaVictoria(ganador) {
 
 function reiniciarJuego() {
   detenerTimerTurno();
+  partidaTerminada = false;
   limpiarPartidaGuardada();
   if (intervalSync) clearInterval(intervalSync);
   intervalSync = null;
@@ -2236,21 +2259,71 @@ function verFinanzas(idx) {
       <div style="font-size:11px;color:var(--gris-dark);margin-top:4px;">Meta: ${fmt(META_VICTORIA)}</div>
     </div>
 
-    <table style="width:100%;font-size:14px;">
-      <tr><td style="padding:6px 0;color:var(--gris-dark);">💵 Saldo efectivo</td><td style="text-align:right;font-weight:700;color:${j.saldo>=0?'var(--verde)':'var(--rojo)'};">${fmt(j.saldo)}</td></tr>
-      <tr><td style="padding:6px 0;color:var(--gris-dark);">📊 Sueldo mensual</td><td style="text-align:right;font-weight:600;">${fmt(j.sueldo)}</td></tr>
-      <tr><td style="padding:6px 0;color:var(--gris-dark);">🏠 Gastos fijos (60% sueldo)</td><td style="text-align:right;font-weight:600;color:var(--naranja);">${fmt(j.gastoBase)}</td></tr>
-      <tr><td style="padding:6px 0;color:var(--gris-dark);">🧾 Últ. impuesto semestral</td><td style="text-align:right;font-weight:600;color:var(--naranja);">${fmt(j._ultimoImpuesto || 0)}</td></tr>
-      <tr><td style="padding:6px 0;color:var(--gris-dark);">📒 Base acumulada (semestre)</td><td style="text-align:right;font-weight:600;">${fmt(Math.max(0, (j._acumIngresos || 0) - (j._acumPrestamos || 0)))} · próx. en ${6 - (j.meses % 6 === 0 ? 0 : j.meses % 6)} mes(es)</td></tr>
-      <tr><td style="padding:6px 0;color:var(--gris-dark);">🏢 Empresas</td><td style="text-align:right;font-weight:600;">${j.empresas.length} (${fmt(j.empresas.reduce((s,e)=>s+e.precio,0))})</td></tr>
-      <tr><td style="padding:6px 0;color:var(--gris-dark);">🏠 Propiedades</td><td style="text-align:right;font-weight:600;">${j.propiedades.length} (${fmt(j.propiedades.reduce((s,p)=>s+p.precio,0))})</td></tr>
-      <tr><td style="padding:6px 0;color:var(--gris-dark);">📈 Inversiones</td><td style="text-align:right;font-weight:600;">${j.acciones.length} (${fmt(j.acciones.reduce((s,a)=>s+getPrecio(a.nombre)*a.cantidad,0))})</td></tr>
-      <tr><td style="padding:6px 0;color:var(--gris-dark);">🏦 Deudas (capital)</td><td style="text-align:right;font-weight:600;color:var(--rojo);">${fmt(j.prestamos.reduce((s,p)=>s+p.principal,0))}</td></tr>
-      <tr style="border-top:2px solid var(--azul);"><td style="padding:10px 0;font-weight:800;color:var(--azul);">💰 Patrimonio total</td><td style="text-align:right;font-weight:800;font-size:18px;color:var(--azul);">${fmt(patrimonio)}</td></tr>
-    </table>
-
-    ${j.enCarrera ? `<div style="background:#cce5ff;border-radius:8px;padding:12px;margin-top:12px;font-size:13px;">🎓 Estudiando ${j.carrera.nombre} — Año ${Math.min(j.carrera.duracion, Math.floor(j.mesesCarrera / MESES_POR_ANIO_CARRERA) + 1)}/${j.carrera.duracion}</div>` : ""}
   `;
+
+  // ===== Estado de Situación Patrimonial (Balance) =====
+  const caja = j.saldo;
+  const inv = j.acciones.reduce((s, a) => s + getPrecio(a.nombre) * a.cantidad, 0);
+  const emp = j.empresas.reduce((s, e) => s + e.precio, 0);
+  const props = j.propiedades.reduce((s, p) => s + p.precio, 0);
+  const totalActivo = caja + inv + emp + props;
+  const deudaBanco = j.prestamos.filter(p => p.tipo !== "jugador").reduce((s, p) => s + p.principal, 0);
+  const deudaJug = j.prestamos.filter(p => p.tipo === "jugador").reduce((s, p) => s + p.principal, 0);
+  const totalPasivo = deudaBanco + deudaJug;
+  const pn = totalActivo - totalPasivo;
+  const fila = (l, v, col) => `<tr class="estado-row"><td>${l}</td><td style="text-align:right;font-weight:600;${col ? "color:" + col + ";" : ""}">${fmt(v)}</td></tr>`;
+  const sub = (l, v, col) => `<tr class="estado-sub"><td>${l}</td><td style="text-align:right;${col ? "color:" + col + ";" : ""}">${fmt(v)}</td></tr>`;
+
+  html += `<div class="estado-box">
+    <div class="estado-titulo">📋 Estado de Situación Patrimonial</div>
+    <table>
+      <tr><td class="estado-cat" colspan="2">ACTIVO</td></tr>
+      ${fila("💵 Caja y bancos", caja, caja < 0 ? "var(--rojo)" : "")}
+      ${fila("📈 Inversiones (acciones y FCI)", inv)}
+      ${fila("🏢 Empresas", emp)}
+      ${fila("🏠 Propiedades", props)}
+      ${sub("Total Activo", totalActivo)}
+      <tr><td class="estado-cat" colspan="2">PASIVO</td></tr>
+      ${fila("🏦 Deudas bancarias", deudaBanco, "var(--rojo)")}
+      ${deudaJug > 0 ? fila("🤝 Deudas con jugadores", deudaJug, "var(--rojo)") : ""}
+      ${sub("Total Pasivo", totalPasivo, "var(--rojo)")}
+      <tr class="estado-total"><td>💰 PATRIMONIO NETO</td><td style="text-align:right;">${fmt(pn)}</td></tr>
+    </table>
+  </div>`;
+
+  // ===== Estado de Resultados (último mes) =====
+  const r = j._resumen;
+  if (r) {
+    const evPos = r.impactoEvento > 0 ? r.impactoEvento : 0;
+    const evNeg = r.impactoEvento < 0 ? -r.impactoEvento : 0;
+    const totalIng = (r.ingresoSueldo || 0) + (r.retornoEmpresa || 0) + (r.alquiler || 0) + evPos;
+    const totalEgr = (r.gastosFijos || 0) + (r.interesPrestamos || 0) + (r.amortizacion || 0) + (r.costoCarrera || 0) + (r.impuesto || 0) + evNeg;
+    const resultado = totalIng - totalEgr;
+    html += `<div class="estado-box">
+      <div class="estado-titulo">📈 Estado de Resultados — ${fechaJugador(j)}</div>
+      <table>
+        <tr><td class="estado-cat" colspan="2">INGRESOS</td></tr>
+        ${r.ingresoSueldo ? fila("💵 Sueldo", r.ingresoSueldo, "var(--verde)") : ""}
+        ${r.retornoEmpresa ? fila("🏢 Empresas", r.retornoEmpresa, "var(--verde)") : ""}
+        ${r.alquiler ? fila("🏠 Alquileres", r.alquiler, "var(--verde)") : ""}
+        ${evPos ? fila("🎁 Evento favorable", evPos, "var(--verde)") : ""}
+        ${sub("Total Ingresos", totalIng, "var(--verde)")}
+        <tr><td class="estado-cat" colspan="2">EGRESOS</td></tr>
+        ${r.gastosFijos ? fila("🏠 Gastos fijos", r.gastosFijos, "var(--rojo)") : ""}
+        ${r.interesPrestamos ? fila("🏦 Interés de préstamos", r.interesPrestamos, "var(--rojo)") : ""}
+        ${r.amortizacion ? fila("🏦 Amortización", r.amortizacion, "var(--rojo)") : ""}
+        ${r.costoCarrera ? fila("🎓 Cuota de carrera", r.costoCarrera, "var(--rojo)") : ""}
+        ${r.impuesto ? fila("🧾 Impuesto a las Ganancias", r.impuesto, "var(--rojo)") : ""}
+        ${evNeg ? fila("⚠️ Evento desfavorable", evNeg, "var(--rojo)") : ""}
+        ${sub("Total Egresos", totalEgr, "var(--rojo)")}
+        <tr class="estado-total"><td>📊 RESULTADO DEL MES</td><td style="text-align:right;color:${resultado >= 0 ? "var(--verde)" : "var(--rojo)"};">${resultado >= 0 ? "+" : "−"}${fmt(Math.abs(resultado))}</td></tr>
+      </table>
+    </div>`;
+  }
+
+  // Nota de impuesto + carrera
+  html += `<div style="font-size:12px;color:var(--gris-dark);margin-bottom:8px;">🧾 Últ. impuesto: ${fmt(j._ultimoImpuesto || 0)} · Base del semestre: ${fmt(Math.max(0, (j._acumIngresos || 0) - (j._acumPrestamos || 0)))} · próx. liquidación en ${6 - (j.meses % 6 === 0 ? 0 : j.meses % 6)} mes(es)</div>`;
+  html += `${j.enCarrera ? `<div style="background:#cce5ff;border-radius:8px;padding:12px;font-size:13px;">🎓 Estudiando ${j.carrera.nombre} — Año ${Math.min(j.carrera.duracion, Math.floor(j.mesesCarrera / MESES_POR_ANIO_CARRERA) + 1)}/${j.carrera.duracion}</div>` : ""}`;
 
   document.getElementById("finanzas-contenido").innerHTML = html;
   document.getElementById("modal-finanzas").style.display = "flex";
