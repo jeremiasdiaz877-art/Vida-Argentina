@@ -178,6 +178,7 @@
     <button class="footer-btn" onclick="abrirPrestamos()"><span class="material-symbols-rounded icon">account_balance</span>Préstamos</button>
     <button class="footer-btn" onclick="abrirPropiedades()"><span class="material-symbols-rounded icon">real_estate_agent</span>Propiedades</button>
     <button class="footer-btn" onclick="abrirPrestamosJugadores()"><span class="material-symbols-rounded icon">handshake</span>Prestar</button>
+    <button class="footer-btn" onclick="abrirSeguro()"><span class="material-symbols-rounded icon">shield</span>Seguro</button>
     <button class="footer-btn" onclick="abrirFinanzas()"><span class="material-symbols-rounded icon">wallet</span>Finanzas</button>
   </div>
 </div>
@@ -260,6 +261,15 @@
     <button class="modal-close" onclick="cerrarModal('modal-prestamos')">×</button>
     <div class="modal-titulo">🏦 Préstamos</div>
     <div id="prestamos-contenido"></div>
+  </div>
+</div>
+
+<!-- Modal Seguro de Quiebra -->
+<div id="modal-seguro" class="modal-overlay" style="display:none;" onclick="cerrarModal('modal-seguro')">
+  <div class="modal" onclick="event.stopPropagation()">
+    <button class="modal-close" onclick="cerrarModal('modal-seguro')">×</button>
+    <div class="modal-titulo">🛡️ Seguro de Quiebra</div>
+    <div id="seguro-contenido"></div>
   </div>
 </div>
 

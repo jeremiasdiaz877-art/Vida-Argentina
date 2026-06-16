@@ -5,6 +5,17 @@ const MES_INICIO = 0; // 0 = enero
 const MESES_NOMBRE = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
 const MESES_POR_ANIO_CARRERA = 3; // cada año de carrera dura 3 turnos
 
+// Calcula el costo de un "gasto grande" (gusto) según el patrimonio del jugador.
+// Te cobra el precio COMPLETO solo si tu patrimonio es >= 1.5x el precio; si no, proporcional.
+// Es un gasto al contado: nunca te cobra más que tu saldo disponible (no te puede fundir).
+function gastoGrande(saldo, patrimonio, precio) {
+  const p = Math.max(0, patrimonio || 0);
+  const s = Math.max(0, saldo || 0);
+  const factor = Math.min(1, p / (precio * 1.5)); // 1 cuando patrimonio >= 1.5x precio
+  const monto = Math.round(precio * factor);
+  return Math.min(monto, s);
+}
+
 const PROVINCIAS = [
   { nombre: "Buenos Aires", ciudades: [
     { nombre: "CABA", bonusSueldo: 0.20, costoVida: 2.0 },
@@ -92,10 +103,12 @@ const EVENTOS = [
   { emoji: "📑", titulo: "Ingresos Brutos (IIBB)", desc: "Pagaste Ingresos Brutos provinciales este mes.", impacto: (s) => -80000, tipo: "neg" },
   { emoji: "🏛️", titulo: "Anticipo de Ganancias", desc: "ARCA te cobró un anticipo del impuesto a las Ganancias.", impacto: (s) => -130000, tipo: "neg" },
   { emoji: "💼", titulo: "Retención impositiva", desc: "Un cliente te retuvo impuestos al pagarte.", impacto: (s) => -60000, tipo: "neg" },
-  { emoji: "🚗", titulo: "Te compraste un auto", desc: "Decidiste darte el gusto y sacar un 0km. Los ahorros volaron.", impacto: (s) => -5000000, tipo: "neg" },
-  { emoji: "✈️", titulo: "Viaje al exterior", desc: "Te fuiste de vacaciones a Miami/Europa. Tarjetazo y a pagar.", impacto: (s) => -3500000, tipo: "neg" },
-  { emoji: "🔧", titulo: "Se rompió el auto", desc: "Fuiste al mecánico y te arrancaron la cabeza con los repuestos.", impacto: (s) => -350000, tipo: "neg" },
-  { emoji: "📱", titulo: "Nuevo iPhone", desc: "Te tentaste y cambiaste el celular por el último modelo.", impacto: (s) => -1500000, tipo: "neg" }
+  // Gastos grandes (gustos): te cobran el precio COMPLETO solo si tu patrimonio es >= 1.5x el precio.
+  // Si tenés menos, pagás la parte proporcional. Y como es un gasto al contado, nunca te cobran más que tu saldo.
+  { emoji: "🚗", titulo: "Te compraste un auto", desc: "Te diste el gusto de un 0km, acorde a lo que tu patrimonio bancaba.", impacto: (s, p) => -gastoGrande(s, p, 5000000), tipo: "neg" },
+  { emoji: "✈️", titulo: "Viaje al exterior", desc: "Te fuiste de vacaciones acorde a tu patrimonio. Tarjetazo y a pagar.", impacto: (s, p) => -gastoGrande(s, p, 3500000), tipo: "neg" },
+  { emoji: "🔧", titulo: "Se rompió el auto", desc: "Fuiste al mecánico y te arrancaron la cabeza con los repuestos.", impacto: (s, p) => -gastoGrande(s, p, 350000), tipo: "neg" },
+  { emoji: "📱", titulo: "Nuevo iPhone", desc: "Te tentaste con un celular nuevo, acorde a tu patrimonio.", impacto: (s, p) => -gastoGrande(s, p, 1500000), tipo: "neg" }
 ];
 
 // Acciones: precio inicial, volatilidad (cuánto se mueve por turno) y drift (tendencia leve)
@@ -137,6 +150,15 @@ const PROPIEDADES = [
   { nombre: "PH con jardín", emoji: "🏘️", precio: 25000000, alquilerPorTurno: 375000, descripcion: "Lujo accesible" },
   { nombre: "Campo agrícola", emoji: "🌾", precio: 90000000, alquilerPorTurno: 1350000, descripcion: "Arrendamiento en dólares" },
   { nombre: "Torre Premium", emoji: "🏙️", precio: 200000000, alquilerPorTurno: 3000000, descripcion: "Inversión gigante" }
+];
+
+// Aseguradoras contra quiebra: pagás una prima mensual y, si quebrás SIN activos para vender,
+// la aseguradora cubre el rojo (hasta su cobertura total) y eso se vuelve una deuda con interés alto.
+// Más cobertura = prima mensual más cara.
+const ASEGURADORAS = [
+  { nombre: "Seguro Básico", emoji: "🛡️", cobertura: 2000000, prima: 45000, tasa: 0.050, descripcion: "Cubre hasta $2M. Rescate al 5%/mes." },
+  { nombre: "Seguro Premium", emoji: "🏰", cobertura: 5000000, prima: 90000, tasa: 0.040, descripcion: "Cubre hasta $5M. Rescate al 4%/mes." },
+  { nombre: "Seguro Elite", emoji: "💎", cobertura: 10000000, prima: 170000, tasa: 0.030, descripcion: "Cubre hasta $10M. Rescate al 3%/mes." }
 ];
 
 // Cada banco tiene su propia tasa mensual, monto máximo, plazos y beneficio

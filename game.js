@@ -454,6 +454,7 @@ function crearJugadorBase(nombre, avatar) {
     empresas: [],
     propiedades: [],
     eliminado: false,
+    seguro: null,
     gastoBase: 0
   };
 }
@@ -976,6 +977,9 @@ function procesarTurno(dado, auto) {
   // 6) Costo de carrera mientras estudia
   const costoCarrera = (j.enCarrera && j.carrera.costo > 0) ? j.carrera.costo : 0;
 
+  // 6b) Prima mensual del seguro de quiebra (si tiene uno contratado)
+  const primaSeguro = j.seguro ? j.seguro.prima : 0;
+
   // 7) El mercado se mueve este mes y aparece la noticia del mes
   actualizarMercado();
   aplicarNoticia();
@@ -983,7 +987,7 @@ function procesarTurno(dado, auto) {
 
   const saldoAntes = j.saldo;
   const ingresado = ingresoSueldo + retornoEmpresa + alquiler;
-  const gastos = gastosFijos + cuotaTotal + costoCarrera;
+  const gastos = gastosFijos + cuotaTotal + costoCarrera + primaSeguro;
   j.saldo += ingresado - gastos;
 
   // Acumular para el Impuesto a las Ganancias semestral
@@ -991,23 +995,25 @@ function procesarTurno(dado, auto) {
   j._acumPrestamos = (j._acumPrestamos || 0) + interesPrestamos + amortizacion;
 
   // El dado decide la suerte: bajo = malo, medio = neutro/chico, alto = bueno
+  // Los eventos reciben (saldo, patrimonio): los gastos grandes usan el patrimonio
   let evento = null, impactoEvento = 0;
+  const patri = calcularPatrimonio(j);
   const positivos = EVENTOS.filter(e => e.tipo === "pos");
   const negativos = EVENTOS.filter(e => e.tipo === "neg");
   if (dado <= 2) {
     // 1-2: evento negativo
     evento = negativos[Math.floor(Math.random() * negativos.length)];
-    impactoEvento = evento.impacto(j.saldo);
+    impactoEvento = evento.impacto(j.saldo, patri);
   } else if (dado <= 4) {
     // 3-4: neutro o pequeña oportunidad (50%)
     if (Math.random() < 0.5) {
       evento = positivos[Math.floor(Math.random() * positivos.length)];
-      impactoEvento = Math.round(evento.impacto(j.saldo) * 0.4); // oportunidad chica
+      impactoEvento = Math.round(evento.impacto(j.saldo, patri) * 0.4); // oportunidad chica
     }
   } else {
     // 5-6: evento positivo (pleno, con el +10% de beneficios)
     evento = positivos[Math.floor(Math.random() * positivos.length)];
-    impactoEvento = Math.round(evento.impacto(j.saldo) * BONUS_BENEFICIOS);
+    impactoEvento = Math.round(evento.impacto(j.saldo, patri) * BONUS_BENEFICIOS);
   }
   if (evento) j.saldo += impactoEvento;
 
@@ -1028,7 +1034,7 @@ function procesarTurno(dado, auto) {
   // Guardar el resumen del turno para mostrarlo
   j._resumen = {
     saldoAntes, ingresoSueldo, retornoEmpresa, alquiler, empresasRiesgo,
-    gastosFijos, interesPrestamos, amortizacion, costoCarrera,
+    gastosFijos, interesPrestamos, amortizacion, costoCarrera, primaSeguro,
     evento, impactoEvento, impuesto, baseImpuesto, tasaImp, saldoDespues: j.saldo
   };
 
@@ -1115,6 +1121,7 @@ function mostrarResumenTurno(j) {
       ${linea("🏦 Interés préstamos (1.5%)", r.interesPrestamos, true)}
       ${linea("🏦 Amortización préstamos", r.amortizacion, true)}
       ${linea("🎓 Cuota de carrera", r.costoCarrera, true)}
+      ${linea("🛡️ Prima del seguro", r.primaSeguro, true)}
       ${r.evento ? linea((r.impactoEvento >= 0 ? "🎁" : "⚠️") + " Evento", Math.abs(r.impactoEvento), r.impactoEvento < 0) : ""}
       ${r.impuesto > 0 ? linea(`🧾 Ganancias semestral (${Math.round(r.tasaImp * 100)}%)`, r.impuesto, true) : ""}
       <tr style="border-top:1px solid var(--gris-med);">
@@ -1137,16 +1144,43 @@ function cerrarModalEvento() {
   verificarQuiebra(j);
 }
 
+// Intenta rescatar al jugador con su seguro. Devuelve true si lo salvó.
+function intentarRescateSeguro(j) {
+  if (!j.seguro || j.saldo >= 0) return false;
+  const rojo = -j.saldo;
+  if (j.seguro.cobertura < rojo) {
+    alert(`⚠️ Tu ${j.seguro.nombre} cubre hasta ${fmt(j.seguro.cobertura)}, pero tu deuda es de ${fmt(rojo)}. El seguro no alcanza a salvarte.`);
+    return false;
+  }
+  j.seguro.cobertura -= rojo; // se consume parte de la cobertura
+  j.saldo = 0;
+  // Lo que cubrió se transforma en una deuda en cuotas con interés (la mecánica de préstamos)
+  const cuotas = 12;
+  j.prestamos.push({
+    banco: `🛡️ ${j.seguro.nombre}`,
+    monto: rojo, principal: rojo,
+    cuotaPrincipal: Math.round(rojo / cuotas),
+    tasaMensual: j.seguro.tasa,
+    tipo: "seguro"
+  });
+  alert(`🛡️ ¡SALVADO POR EL SEGURO!\n${j.seguro.nombre} cubrió ${fmt(rojo)}.\n\nLo devolvés en ${cuotas} cuotas al ${(j.seguro.tasa * 100).toFixed(1)}%/mes.\nCobertura restante: ${fmt(j.seguro.cobertura)}.`);
+  actualizarHUD();
+  if (online.activo) pushEstado();
+  return true;
+}
+
 function verificarQuiebra(j) {
   if (j.saldo < 0) {
     const tieneActivos = j.empresas.length > 0 || j.propiedades.length > 0 || j.acciones.length > 0;
     if (tieneActivos) {
-      mostrarQuiebra(j);
+      mostrarQuiebra(j); // primero te ofrece vender activos
       return;
-    } else {
-      j.eliminado = true;
-      alert(`💸 ${j.nombre} quedó en quiebra y fue eliminado del juego.`);
     }
+    // Sin activos para responder: último recurso, el seguro
+    if (intentarRescateSeguro(j)) { verificarVictoria(j); return; }
+    // Sin seguro (o cobertura insuficiente): eliminado
+    j.eliminado = true;
+    alert(`💸 ${j.nombre} quedó en quiebra y fue eliminado del juego.`);
   }
 
   verificarVictoria(j);
@@ -1240,8 +1274,11 @@ function continuarDespuesQuiebra() {
   cerrarModal("modal-quiebra");
   const j = estado.jugadores[estado.jugadorActual];
   if (j.saldo < 0) {
-    j.eliminado = true;
-    alert(`💸 ${j.nombre} quedó en quiebra y fue eliminado del juego.`);
+    // Vendió lo que pudo y sigue en rojo: último recurso, el seguro
+    if (!intentarRescateSeguro(j)) {
+      j.eliminado = true;
+      alert(`💸 ${j.nombre} quedó en quiebra y fue eliminado del juego.`);
+    }
   }
   verificarVictoria(j);
 }
@@ -1863,6 +1900,66 @@ function abrirPrestamos() {
   document.getElementById("modal-prestamos").style.display = "flex";
 }
 
+// ==================== SEGURO DE QUIEBRA ====================
+function abrirSeguro() {
+  if (!esMiTurno()) { alert("Esperá tu turno para operar."); return; }
+
+  window.contratarSeguro = (i) => {
+    const j = estado.jugadores[estado.jugadorActual];
+    const a = ASEGURADORAS[i];
+    if (j.seguro) { alert("Ya tenés un seguro contratado. Cancelalo primero si querés cambiar."); return; }
+    if (j.saldo < a.prima) { alert(`No te alcanza para pagar la primera prima (${fmt(a.prima)}). Tenés ${fmt(j.saldo)}.`); return; }
+    j.saldo -= a.prima; // pagás el primer mes al contratar
+    j.seguro = { nombre: a.nombre, emoji: a.emoji, cobertura: a.cobertura, coberturaTotal: a.cobertura, prima: a.prima, tasa: a.tasa };
+    actualizarHUD();
+    if (online.activo) pushEstado();
+    render();
+    alert(`🛡️ Contrataste ${a.nombre}.\nPagás ${fmt(a.prima)}/mes y te cubre hasta ${fmt(a.cobertura)} si quebrás sin activos.`);
+  };
+
+  window.cancelarSeguro = () => {
+    const j = estado.jugadores[estado.jugadorActual];
+    if (!j.seguro) return;
+    if (!confirm(`¿Cancelar tu ${j.seguro.nombre}? Dejás de pagar la prima pero perdés la cobertura. No hay reembolso.`)) return;
+    j.seguro = null;
+    actualizarHUD();
+    if (online.activo) pushEstado();
+    render();
+    alert("Cancelaste el seguro.");
+  };
+
+  function render() {
+    const j = estado.jugadores[estado.jugadorActual];
+    let html = `<p style="font-size:13px;color:var(--gris-dark);margin-bottom:14px;">Si quebrás y no te quedan activos para vender, tu seguro cubre el rojo (hasta su tope) y lo devolvés en cuotas con interés. Más cobertura = prima mensual más cara.</p>`;
+
+    if (j.seguro) {
+      const s = j.seguro;
+      html += `<div style="background:#eaf7f0;border:2px solid var(--verde);border-radius:14px;padding:14px;margin-bottom:16px;">
+        <div style="font-weight:800;color:var(--azul);font-size:15px;">${s.emoji} ${s.nombre} <span style="color:var(--verde);">· ACTIVO</span></div>
+        <div style="font-size:13px;color:var(--gris-dark);margin-top:6px;line-height:1.6;">
+          Prima: <strong>${fmt(s.prima)}/mes</strong><br>
+          Cobertura disponible: <strong>${fmt(s.cobertura)}</strong> de ${fmt(s.coberturaTotal)}<br>
+          Interés si usás la cobertura: <strong>${(s.tasa * 100).toFixed(1)}%/mes</strong>
+        </div>
+        <button class="btn btn-rojo btn-sm" style="margin-top:10px;" onclick="cancelarSeguro()">Cancelar seguro</button>
+      </div>`;
+    }
+
+    html += ASEGURADORAS.map((a, i) => `
+      <div class="prestamo-opcion" ${j.seguro ? 'style="opacity:0.55;"' : ''}>
+        <div class="prestamo-nombre">${a.emoji} ${a.nombre}</div>
+        <div class="prestamo-detalle">Cobertura ${fmt(a.cobertura)} • Prima ${fmt(a.prima)}/mes • Interés ${(a.tasa * 100).toFixed(1)}%/mes</div>
+        <div class="prestamo-detalle" style="color:var(--gris-dark);">${a.descripcion}</div>
+        ${j.seguro ? '' : `<button class="btn btn-verde btn-sm" style="margin-top:8px;" onclick="contratarSeguro(${i})">Contratar</button>`}
+      </div>`).join("");
+
+    document.getElementById("seguro-contenido").innerHTML = html;
+  }
+
+  render();
+  document.getElementById("modal-seguro").style.display = "flex";
+}
+
 // ==================== PRÉSTAMOS ENTRE JUGADORES ====================
 // Concreta el préstamo: transfiere la plata y crea la deuda
 function ejecutarPrestamoJugador(prestamista, deudor, monto, total, meses, cuotaMensual) {
@@ -2325,23 +2422,28 @@ function verFinanzas(idx) {
   if (r) {
     const evPos = r.impactoEvento > 0 ? r.impactoEvento : 0;
     const evNeg = r.impactoEvento < 0 ? -r.impactoEvento : 0;
-    const totalIng = (r.ingresoSueldo || 0) + (r.retornoEmpresa || 0) + (r.alquiler || 0) + evPos;
-    const totalEgr = (r.gastosFijos || 0) + (r.interesPrestamos || 0) + (r.amortizacion || 0) + (r.costoCarrera || 0) + (r.impuesto || 0) + evNeg;
+    // Las empresas pueden tener un mal mes: si el retorno es negativo, va a EGRESOS (pérdida)
+    const empPos = (r.retornoEmpresa || 0) > 0 ? r.retornoEmpresa : 0;
+    const empNeg = (r.retornoEmpresa || 0) < 0 ? -r.retornoEmpresa : 0;
+    const totalIng = (r.ingresoSueldo || 0) + empPos + (r.alquiler || 0) + evPos;
+    const totalEgr = (r.gastosFijos || 0) + (r.interesPrestamos || 0) + (r.amortizacion || 0) + (r.costoCarrera || 0) + (r.impuesto || 0) + evNeg + empNeg + (r.primaSeguro || 0);
     const resultado = totalIng - totalEgr;
     html += `<div class="estado-box">
       <div class="estado-titulo">📈 Estado de Resultados — ${fechaJugador(j)}</div>
       <table>
         <tr><td class="estado-cat" colspan="2">INGRESOS</td></tr>
         ${r.ingresoSueldo ? fila("💵 Sueldo", r.ingresoSueldo, "var(--verde)") : ""}
-        ${r.retornoEmpresa ? fila("🏢 Empresas", r.retornoEmpresa, "var(--verde)") : ""}
+        ${empPos ? fila("🏢 Empresas", empPos, "var(--verde)") : ""}
         ${r.alquiler ? fila("🏠 Alquileres", r.alquiler, "var(--verde)") : ""}
         ${evPos ? fila("🎁 Evento favorable", evPos, "var(--verde)") : ""}
         ${sub("Total Ingresos", totalIng, "var(--verde)")}
         <tr><td class="estado-cat" colspan="2">EGRESOS</td></tr>
         ${r.gastosFijos ? fila("🏠 Gastos fijos", r.gastosFijos, "var(--rojo)") : ""}
+        ${empNeg ? fila("🏢 Pérdida de empresas", empNeg, "var(--rojo)") : ""}
         ${r.interesPrestamos ? fila("🏦 Interés de préstamos", r.interesPrestamos, "var(--rojo)") : ""}
         ${r.amortizacion ? fila("🏦 Amortización", r.amortizacion, "var(--rojo)") : ""}
         ${r.costoCarrera ? fila("🎓 Cuota de carrera", r.costoCarrera, "var(--rojo)") : ""}
+        ${r.primaSeguro ? fila("🛡️ Prima del seguro", r.primaSeguro, "var(--rojo)") : ""}
         ${r.impuesto ? fila("🧾 Impuesto a las Ganancias", r.impuesto, "var(--rojo)") : ""}
         ${evNeg ? fila("⚠️ Evento desfavorable", evNeg, "var(--rojo)") : ""}
         ${sub("Total Egresos", totalEgr, "var(--rojo)")}
