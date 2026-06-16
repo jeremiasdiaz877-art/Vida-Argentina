@@ -456,7 +456,9 @@ function crearJugadorBase(nombre, avatar) {
     propiedades: [],
     eliminado: false,
     seguro: null,
-    gastoBase: 0
+    gastoBase: 0,
+    _estadoImpositivo: "Monotributo (Cat. A)", // arrancan como monotributistas
+    _saldoIvaAFavor: 0                          // sin saldo a favor de IVA al inicio
   };
 }
 
@@ -966,11 +968,11 @@ function procesarTurno(dado, auto) {
   // 4) Gastos fijos = 60% del ingreso por sueldo de este turno
   const gastosFijos = Math.round(ingresoSueldo * 0.6);
 
-  // 5) Préstamos: interés mensual (1.5% del monto pedido) + amortización del capital
+  // 5) Préstamos: Sistema Alemán — capital fijo + interés sobre el saldo deudor (baja mes a mes)
   let interesPrestamos = 0;
   let amortizacion = 0;
   j.prestamos.forEach(p => {
-    const interes = Math.round(p.monto * p.tasaMensual);
+    const interes = Math.round(p.principal * p.tasaMensual);
     const capital = Math.min(p.cuotaPrincipal, p.principal);
     interesPrestamos += interes;
     amortizacion += capital;
@@ -995,14 +997,38 @@ function procesarTurno(dado, auto) {
   aplicarNoticia();
   actualizarMercadoPanel();
 
+  // Liquidación mensual de IVA (solo Responsables Inscriptos): Débito (ventas) vs Crédito (compras)
+  let pagoIva = 0, ivaUsadoAFavor = 0;
+  if (j._estadoImpositivo === "Responsable Inscripto") {
+    const ivaDebito = (retornoEmpresa > 0 ? retornoEmpresa : 0) * 0.21; // 21% sobre ventas de empresas
+    const ivaCredito = (gastosFijos * 0.5) * 0.21; // la mitad de los gastos fijos tienen IVA discriminado
+    const posicionMensual = Math.round(ivaDebito - ivaCredito);
+    if (posicionMensual > 0) {
+      const aFavor = j._saldoIvaAFavor || 0;
+      if (aFavor >= posicionMensual) {
+        ivaUsadoAFavor = posicionMensual;
+        j._saldoIvaAFavor = aFavor - posicionMensual;
+      } else {
+        ivaUsadoAFavor = aFavor;
+        pagoIva = posicionMensual - aFavor;
+        j._saldoIvaAFavor = 0;
+      }
+    } else {
+      // Más compras que ventas: se acumula saldo a favor técnico para el mes siguiente
+      j._saldoIvaAFavor = (j._saldoIvaAFavor || 0) + Math.abs(posicionMensual);
+    }
+  }
+
   const saldoAntes = j.saldo;
   const ingresado = ingresoSueldo + retornoEmpresa + alquiler;
-  const gastos = gastosFijos + cuotaTotal + costoCarrera + primaSeguro;
+  const gastos = gastosFijos + cuotaTotal + costoCarrera + primaSeguro + pagoIva;
   j.saldo += ingresado - gastos;
 
-  // Acumular para el Impuesto a las Ganancias semestral
+  // Acumular para la liquidación semestral
   j._acumIngresos = (j._acumIngresos || 0) + ingresoSueldo + retornoEmpresa + alquiler;
-  j._acumPrestamos = (j._acumPrestamos || 0) + interesPrestamos + amortizacion;
+  // Deducciones permitidas: intereses de préstamos (NO el capital), cuota de carrera y 20% de gastos fijos
+  // (simulando deducciones de la actividad: home office, ropa de trabajo, etc.)
+  j._acumDeducciones = (j._acumDeducciones || 0) + interesPrestamos + costoCarrera + Math.round(gastosFijos * 0.20);
 
   // El dado decide la suerte: bajo = malo, medio = neutro/chico, alto = bueno
   // Los eventos reciben (saldo, patrimonio): los gastos grandes usan el patrimonio
@@ -1025,19 +1051,48 @@ function procesarTurno(dado, auto) {
     evento = positivos[Math.floor(Math.random() * positivos.length)];
     impactoEvento = Math.round(evento.impacto(j.saldo, patri) * BONUS_BENEFICIOS);
   }
-  if (evento) j.saldo += impactoEvento;
+  if (evento) {
+    j.saldo += impactoEvento;
+    // Si sufriste una retención, queda como saldo a cuenta del impuesto del semestre
+    if (evento.titulo === "Retención impositiva") {
+      j._acumRetenciones = (j._acumRetenciones || 0) + Math.abs(impactoEvento);
+    }
+  }
 
-  // Impuesto a las Ganancias cada 6 meses (escala progresiva)
-  let impuesto = 0, baseImpuesto = 0, tasaImp = 0;
-  if (j.meses % 6 === 0) {
-    baseImpuesto = (j._acumIngresos || 0) - (j._acumPrestamos || 0);
-    tasaImp = tasaGanancias(baseImpuesto);
-    impuesto = Math.round(Math.max(0, baseImpuesto) * tasaImp);
+  // Recategorización y liquidación impositiva cada 6 meses (Monotributo vs Responsable Inscripto)
+  let impuesto = 0, baseImpuesto = 0, impuestoDeterminado = 0;
+  if (j.meses > 0 && j.meses % 6 === 0) {
+    // La base imponible descuenta los gastos deducibles (NO el capital de los préstamos)
+    baseImpuesto = Math.max(0, (j._acumIngresos || 0) - (j._acumDeducciones || 0));
+    const LIMITE_MONOTRIBUTO = 15000000; // tope de facturación semestral (valor de juego)
+    if (baseImpuesto <= LIMITE_MONOTRIBUTO) {
+      // Monotributo: cuota fija según categoría
+      const categoria = baseImpuesto <= 5000000 ? "A" : (baseImpuesto <= 10000000 ? "C" : "H");
+      if (categoria === "A") impuestoDeterminado = 150000;
+      else if (categoria === "C") impuestoDeterminado = 300000;
+      else impuestoDeterminado = 600000;
+      j._estadoImpositivo = `Monotributo (Cat. ${categoria})`;
+    } else {
+      // Responsable Inscripto: tope del Monotributo + 30% del excedente (sin salto brusco)
+      impuestoDeterminado = Math.round(liquidarGananciasRI(baseImpuesto));
+      j._estadoImpositivo = "Responsable Inscripto";
+    }
+    // Las retenciones sufridas son pago a cuenta: se restan del impuesto determinado
+    const retencionesAcumuladas = j._acumRetenciones || 0;
+    impuesto = Math.max(0, impuestoDeterminado - retencionesAcumuladas);
+    const saldoAFavor = Math.max(0, retencionesAcumuladas - impuestoDeterminado);
     j.saldo -= impuesto;
+    if (saldoAFavor > 0) j.saldo += saldoAFavor; // te retuvieron de más: reintegro
+    // Historial para mostrar en pantalla
     j._ultimoImpuesto = impuesto;
     j._ultimaBaseImpuesto = baseImpuesto;
+    j._ultimasDeducciones = j._acumDeducciones || 0;
+    j._ultimasRetenciones = retencionesAcumuladas;
+    j._ultimoImpuestoDeterminado = impuestoDeterminado;
+    // Reset de acumuladores del semestre
     j._acumIngresos = 0;
-    j._acumPrestamos = 0;
+    j._acumDeducciones = 0;
+    j._acumRetenciones = 0;
     j._prestamosSemestre = {}; // nuevo semestre: se reinician los créditos por banco
   }
 
@@ -1045,7 +1100,8 @@ function procesarTurno(dado, auto) {
   j._resumen = {
     saldoAntes, ingresoSueldo, retornoEmpresa, alquiler, empresasRiesgo,
     gastosFijos, interesPrestamos, amortizacion, costoCarrera, primaSeguro,
-    evento, impactoEvento, impuesto, baseImpuesto, tasaImp, saldoDespues: j.saldo
+    pagoIva, ivaUsadoAFavor, saldoIva: j._saldoIvaAFavor,
+    evento, impactoEvento, impuesto, baseImpuesto, estadoImpositivo: j._estadoImpositivo, saldoDespues: j.saldo
   };
 
   if (auto) {
@@ -1060,11 +1116,12 @@ function procesarTurno(dado, auto) {
   if (online.activo) pushEstado(); // sincronizar el resultado del turno
 }
 
-// Escala progresiva del Impuesto a las Ganancias (sobre la base del semestre)
-function tasaGanancias(base) {
-  if (base < 5000000) return 0.15;
-  if (base < 20000000) return 0.20;
-  return 0.35;
+// Impuesto del Responsable Inscripto: paga el tope del Monotributo + 30% del excedente sobre el límite.
+// Así el cruce de Monotributo a RI es gradual y no hay un "salto" que castigue facturar un peso de más.
+function liquidarGananciasRI(base) {
+  const LIMITE = 15000000;
+  const TOPE_MONOTRIBUTO = 600000;
+  return TOPE_MONOTRIBUTO + Math.max(0, base - LIMITE) * 0.30;
 }
 
 // Muestra el resumen del turno (con o sin evento) y el desglose de ingresos/gastos
@@ -1113,11 +1170,27 @@ function mostrarResumenTurno(j) {
     </div>`;
   }
 
-  if (r.impuesto > 0) {
+  if (j._estadoImpositivo === "Responsable Inscripto") {
+    let ivaAviso;
+    if (r.pagoIva > 0) ivaAviso = `Tuviste que pagar <strong>${fmt(r.pagoIva)}</strong> de IVA a ARCA.`;
+    else if (r.ivaUsadoAFavor > 0) ivaAviso = `Compensaste <strong>${fmt(r.ivaUsadoAFavor)}</strong> con tu saldo a favor.`;
+    else ivaAviso = `Tuviste más compras que ventas: no pagaste IVA este mes.`;
+    html += `<div style="background:#f8f9fa;border:1px solid #ced4da;border-left:4px solid var(--azul-claro);border-radius:8px;padding:10px;margin-bottom:14px;font-size:12px;color:var(--gris-dark);">
+      <strong>🏛️ Posición mensual de IVA</strong><br>
+      ${ivaAviso} Saldo a favor técnico: <strong>${fmt(r.saldoIva || 0)}</strong>
+    </div>`;
+  }
+
+  if (j.meses > 0 && j.meses % 6 === 0) {
+    const regimenStr = j._estadoImpositivo || "Régimen impositivo";
+    const retencionesStr = (j._ultimasRetenciones > 0) ? `<br><span style="color:var(--verde);">Pago a cuenta (retenciones): −${fmt(j._ultimasRetenciones)}</span>` : "";
+    const deduccionesStr = `<br><span style="font-size:12px;color:var(--gris-dark);">Se dedujeron ${fmt(j._ultimasDeducciones || 0)} por intereses, carrera y gastos de actividad.</span>`;
     html += `<div style="background:#fff3cd;border:1px solid #ffc107;border-radius:12px;padding:12px;margin-bottom:14px;font-size:13px;">
-      <strong>🧾 Liquidación semestral de Ganancias</strong><br>
-      Base del semestre (ingresos − préstamos): ${fmt(r.baseImpuesto)}<br>
-      Alícuota aplicada: ${Math.round(r.tasaImp * 100)}% → pagás ${fmt(r.impuesto)}
+      <strong>🧾 Recategorización y liquidación semestral</strong><br>
+      Base imponible neta: <strong>${fmt(j._ultimaBaseImpuesto || 0)}</strong>${deduccionesStr}<br>
+      Categoría actual: <strong>${regimenStr}</strong><br>
+      Impuesto determinado: ${fmt(j._ultimoImpuestoDeterminado || 0)}${retencionesStr}<br>
+      Saldo a pagar hoy: <strong style="color:var(--rojo);">${fmt(j._ultimoImpuesto || 0)}</strong>
     </div>`;
   }
 
@@ -1132,8 +1205,9 @@ function mostrarResumenTurno(j) {
       ${linea("🏦 Amortización préstamos", r.amortizacion, true)}
       ${linea("🎓 Cuota de carrera", r.costoCarrera, true)}
       ${linea("🛡️ Prima del seguro", r.primaSeguro, true)}
+      ${r.pagoIva > 0 ? linea("🏛️ Pago de IVA mensual", r.pagoIva, true) : ""}
       ${r.evento ? linea((r.impactoEvento >= 0 ? "🎁" : "⚠️") + " Evento", Math.abs(r.impactoEvento), r.impactoEvento < 0) : ""}
-      ${r.impuesto > 0 ? linea(`🧾 Ganancias semestral (${Math.round(r.tasaImp * 100)}%)`, r.impuesto, true) : ""}
+      ${r.impuesto > 0 ? linea(`🧾 Impuestos semestrales`, r.impuesto, true) : ""}
       <tr style="border-top:1px solid var(--gris-med);">
         <td style="padding:8px 0;font-weight:800;">Cambio del turno</td>
         <td style="text-align:right;font-weight:800;color:${cambioNeto >= 0 ? "var(--verde)" : "var(--rojo)"};">${cambioNeto >= 0 ? "+" : "−"}${fmt(Math.abs(cambioNeto))}</td>
@@ -1778,23 +1852,23 @@ function abrirPrestamos() {
 
     const monto = montoSeleccionado;
     const tasaMensual = banco.tasa;
-    const interesMensual = Math.round(monto * tasaMensual);
     const cuotaPrincipal = Math.round(monto / cuotasSeleccionadas);
-    const pagoMensual = interesMensual + cuotaPrincipal;
-    const interesTotal = interesMensual * cuotasSeleccionadas;
-    const totalAPagar = monto + interesTotal;
+    const interesInicial = Math.round(monto * tasaMensual);
+    const primeraCuota = cuotaPrincipal + interesInicial;
+    // Sistema Alemán: el interés total ≈ suma aritmética (la cuota baja mes a mes)
+    const interesTotal = Math.round(interesInicial * (cuotasSeleccionadas + 1) / 2);
 
     cont.innerHTML = `
       <div class="prestamo-resumen">
-        <strong>Resumen del préstamo (${banco.nombre}):</strong><br>
+        <strong>Resumen del préstamo (${banco.nombre}) — Sistema Alemán:</strong><br>
         Monto: ${fmt(monto)} en ${cuotasSeleccionadas} meses<br>
-        Interés mensual (${(tasaMensual * 100).toFixed(1)}%): ${fmt(interesMensual)}<br>
-        Cuota de capital: ${fmt(cuotaPrincipal)}<br>
-        <strong>Pago por mes: ${fmt(pagoMensual)}</strong><br>
-        Interés total: ${fmt(interesTotal)} • Total: ${fmt(totalAPagar)}
+        Cuota de capital (fija): ${fmt(cuotaPrincipal)}<br>
+        Interés inicial (${(tasaMensual * 100).toFixed(1)}% sobre saldo): ${fmt(interesInicial)}<br>
+        <strong>Primera cuota: ${fmt(primeraCuota)}</strong><br>
+        <span style="font-size:12px;color:var(--gris-dark);">💡 La cuota baja mes a mes. Interés total est.: ${fmt(interesTotal)}</span>
       </div>
     `;
-    window._prestamoPendiente = { banco: banco.nombre, monto, cuotas: cuotasSeleccionadas, principal: monto, cuotaPrincipal, tasaMensual };
+    window._prestamoPendiente = { banco: banco.nombre, monto, cuotas: cuotasSeleccionadas, principal: monto, cuotaPrincipal, tasaMensual, tipo: "banco" };
   }
   window.actualizarResumenPrestamo = actualizarResumenPrestamo;
 
@@ -1818,12 +1892,12 @@ function abrirPrestamos() {
     alert(`✅ Préstamo de ${fmt(p.monto)} aprobado en ${p.banco}. Te cobran ${tasaTxt}%/mes mientras debas.`);
   };
 
-  // Pagar un mes adelantado (interés + cuota de capital)
+  // Pagar un mes adelantado (interés sobre saldo deudor + cuota de capital) — Sistema Alemán
   window.pagarCuota = (idx) => {
     const j = estado.jugadores[estado.jugadorActual];
     const p = j.prestamos[idx];
     if (!p) return;
-    const interes = Math.round(p.monto * p.tasaMensual);
+    const interes = Math.round(p.principal * p.tasaMensual);
     const capital = Math.min(p.cuotaPrincipal, p.principal);
     const pago = interes + capital;
     if (j.saldo < pago) { alert(`No te alcanza para pagar el mes (${fmt(pago)} = ${fmt(interes)} interés + ${fmt(capital)} capital). Tenés ${fmt(j.saldo)}.`); return; }
@@ -1892,7 +1966,7 @@ function abrirPrestamos() {
         <p style="font-weight:600;font-size:14px;margin-bottom:8px;">Deudas actuales:</p>
         ${j.prestamos.map((p, idx) => `
           <div style="background:var(--gris);border-radius:8px;padding:10px;margin-bottom:6px;font-size:13px;">
-            <div style="margin-bottom:8px;"><strong>${p.banco}</strong> — ${p.tipo === "jugador" ? "Resta" : "Capital restante"}: ${fmt(p.principal)} | ${p.tipo === "jugador" ? "Cuota" : "Interés"}: ${fmt(p.tipo === "jugador" ? p.cuotaPrincipal : Math.round(p.monto * p.tasaMensual))}/mes</div>
+            <div style="margin-bottom:8px;"><strong>${p.banco}</strong> — ${p.tipo === "jugador" ? "Resta" : "Capital restante"}: ${fmt(p.principal)}<br>${p.tipo === "jugador" ? `Cuota: ${fmt(p.cuotaPrincipal)}/mes` : `Próxima cuota: ${fmt(Math.min(p.cuotaPrincipal, p.principal) + Math.round(p.principal * p.tasaMensual))} (${fmt(Math.min(p.cuotaPrincipal, p.principal))} cap + ${fmt(Math.round(p.principal * p.tasaMensual))} int)`}</div>
             <div style="display:flex;gap:8px;">
               <button class="btn btn-secondary btn-sm" onclick="pagarCuota(${idx})" style="flex:1;">Pagar 1 mes</button>
               <button class="btn btn-rojo btn-sm" onclick="cancelarDeuda(${idx})" style="flex:1;">Cancelar todo</button>
@@ -2367,6 +2441,55 @@ function abrirPropiedades() {
   document.getElementById("modal-propiedades").style.display = "flex";
 }
 
+function abrirTributos() {
+  const j = estado.jugadores[estado.jugadorActual];
+  const regimen = j._estadoImpositivo || "Monotributo (Cat. A)";
+  const esRI = regimen === "Responsable Inscripto";
+  const proxRecat = 6 - (j.meses % 6 === 0 ? 0 : j.meses % 6);
+  const baseParcial = Math.max(0, (j._acumIngresos || 0) - (j._acumDeducciones || 0));
+
+  const fila = (l, v, col) => `<div class="estado-row" style="display:flex;justify-content:space-between;padding:5px 0;"><span style="color:var(--gris-dark);">${l}</span><span style="font-weight:700;${col ? "color:" + col + ";" : ""}">${v}</span></div>`;
+
+  let html = `
+    <div style="text-align:center;margin-bottom:16px;">
+      <div style="display:inline-block;background:${esRI ? "var(--azul)" : "var(--verde)"};color:white;font-weight:800;font-size:15px;padding:8px 18px;border-radius:50px;">${esRI ? "🏛️" : "🧾"} ${regimen}</div>
+      <div style="font-size:12px;color:var(--gris-dark);margin-top:8px;">Próxima recategorización en <strong>${proxRecat}</strong> mes(es)</div>
+    </div>`;
+
+  // Semestre en curso
+  html += `<div class="estado-box">
+    <div class="estado-titulo">📅 Semestre en curso</div>
+    ${fila("Facturación acumulada", fmt(j._acumIngresos || 0))}
+    ${fila("Deducciones acumuladas", "−" + fmt(j._acumDeducciones || 0), "var(--verde)")}
+    ${fila("Base imponible parcial", fmt(baseParcial))}
+    ${fila("Retenciones a favor", fmt(j._acumRetenciones || 0), "var(--verde)")}
+    ${esRI ? fila("Saldo a favor de IVA", fmt(j._saldoIvaAFavor || 0), "var(--verde)") : ""}
+  </div>`;
+
+  // Última liquidación (si ya hubo una)
+  if (j._ultimoImpuesto !== undefined) {
+    html += `<div class="estado-box">
+      <div class="estado-titulo">🧾 Última liquidación semestral</div>
+      ${fila("Base imponible neta", fmt(j._ultimaBaseImpuesto || 0))}
+      ${fila("Deducciones aplicadas", "−" + fmt(j._ultimasDeducciones || 0), "var(--verde)")}
+      ${fila("Impuesto determinado", fmt(j._ultimoImpuestoDeterminado || 0))}
+      ${(j._ultimasRetenciones > 0) ? fila("Retenciones (pago a cuenta)", "−" + fmt(j._ultimasRetenciones), "var(--verde)") : ""}
+      ${fila("Pagado", fmt(j._ultimoImpuesto || 0), "var(--rojo)")}
+    </div>`;
+  }
+
+  // Explicación de los regímenes
+  html += `<div style="background:var(--gris);border-radius:12px;padding:12px;font-size:12px;color:var(--gris-dark);line-height:1.6;">
+    <strong>¿Cómo tributás?</strong><br>
+    🧾 <strong>Monotributo</strong>: hasta ${fmt(15000000)} de base semestral. Cuota fija ($150k Cat. A / $300k Cat. C / $600k Cat. H). Todo unificado.<br>
+    🏛️ <strong>Responsable Inscripto</strong>: si superás ese tope. Pagás Ganancias (tope + 30% del excedente) <em>y</em> liquidás <strong>IVA mensual</strong> (Débito por ventas − Crédito por compras).<br>
+    💡 Las <strong>deducciones</strong> (intereses, carrera, gastos) bajan la base. Las <strong>retenciones</strong> son plata que ya pagaste a cuenta del impuesto.
+  </div>`;
+
+  document.getElementById("tributos-contenido").innerHTML = html;
+  document.getElementById("modal-tributos").style.display = "flex";
+}
+
 function abrirFinanzas() {
   verFinanzas(estado.jugadorActual);
 }
@@ -2436,7 +2559,7 @@ function verFinanzas(idx) {
     const empPos = (r.retornoEmpresa || 0) > 0 ? r.retornoEmpresa : 0;
     const empNeg = (r.retornoEmpresa || 0) < 0 ? -r.retornoEmpresa : 0;
     const totalIng = (r.ingresoSueldo || 0) + empPos + (r.alquiler || 0) + evPos;
-    const totalEgr = (r.gastosFijos || 0) + (r.interesPrestamos || 0) + (r.amortizacion || 0) + (r.costoCarrera || 0) + (r.impuesto || 0) + evNeg + empNeg + (r.primaSeguro || 0);
+    const totalEgr = (r.gastosFijos || 0) + (r.interesPrestamos || 0) + (r.amortizacion || 0) + (r.costoCarrera || 0) + (r.impuesto || 0) + evNeg + empNeg + (r.primaSeguro || 0) + (r.pagoIva || 0);
     const resultado = totalIng - totalEgr;
     html += `<div class="estado-box">
       <div class="estado-titulo">📈 Estado de Resultados — ${fechaJugador(j)}</div>
@@ -2454,6 +2577,7 @@ function verFinanzas(idx) {
         ${r.amortizacion ? fila("🏦 Amortización", r.amortizacion, "var(--rojo)") : ""}
         ${r.costoCarrera ? fila("🎓 Cuota de carrera", r.costoCarrera, "var(--rojo)") : ""}
         ${r.primaSeguro ? fila("🛡️ Prima del seguro", r.primaSeguro, "var(--rojo)") : ""}
+        ${r.pagoIva ? fila("🏛️ IVA mensual (RI)", r.pagoIva, "var(--rojo)") : ""}
         ${r.impuesto ? fila("🧾 Impuesto a las Ganancias", r.impuesto, "var(--rojo)") : ""}
         ${evNeg ? fila("⚠️ Evento desfavorable", evNeg, "var(--rojo)") : ""}
         ${sub("Total Egresos", totalEgr, "var(--rojo)")}
@@ -2463,7 +2587,7 @@ function verFinanzas(idx) {
   }
 
   // Nota de impuesto + carrera
-  html += `<div style="font-size:12px;color:var(--gris-dark);margin-bottom:8px;">🧾 Últ. impuesto: ${fmt(j._ultimoImpuesto || 0)} · Base del semestre: ${fmt(Math.max(0, (j._acumIngresos || 0) - (j._acumPrestamos || 0)))} · próx. liquidación en ${6 - (j.meses % 6 === 0 ? 0 : j.meses % 6)} mes(es)</div>`;
+  html += `<div style="font-size:12px;color:var(--gris-dark);margin-bottom:8px;background:#fff3cd;padding:8px;border-radius:6px;border:1px solid #ffc107;">🧾 Régimen actual: <strong>${j._estadoImpositivo || "No categorizado"}</strong> · Últ. pago: ${fmt(j._ultimoImpuesto || 0)} · Base imponible parcial: ${fmt(Math.max(0, (j._acumIngresos || 0) - (j._acumDeducciones || 0)))} · Retenciones a favor: ${fmt(j._acumRetenciones || 0)} · próx. recategorización en ${6 - (j.meses % 6 === 0 ? 0 : j.meses % 6)} mes(es)</div>`;
   html += `${j.enCarrera ? `<div style="background:#cce5ff;border-radius:8px;padding:12px;font-size:13px;">🎓 Estudiando ${j.carrera.nombre} — Año ${Math.min(j.carrera.duracion, Math.floor(j.mesesCarrera / MESES_POR_ANIO_CARRERA) + 1)}/${j.carrera.duracion}</div>` : ""}`;
 
   document.getElementById("finanzas-contenido").innerHTML = html;
@@ -2479,30 +2603,22 @@ restaurarPartida();
 function checkTiempoGlobal() {
   if (!estado.inicioPartida || partidaTerminada) return;
   
-  const limiteMs = 35 * 60 * 1000; // 35 minutos
+  const limiteMs = 35 * 60 * 1000;
   const transcurrido = Date.now() - estado.inicioPartida;
   const restante = limiteMs - transcurrido;
 
-  let elHUD = document.getElementById("reloj-global");
-  if (!elHUD) {
-    const header = document.getElementById("jugadores-hud");
-    if (header) {
-      elHUD = document.createElement("div");
-      elHUD.id = "reloj-global";
-      elHUD.style.cssText = "background:var(--rojo); color:white; padding:8px 16px; border-radius:12px; font-weight:800; font-size:14px; margin-right:10px; display:flex; align-items:center; flex-shrink:0; box-shadow:0 4px 10px rgba(214,48,49,0.3);";
-      header.prepend(elHUD);
-    }
-  }
+  const elHUD = document.getElementById("reloj-global");
+  if (!elHUD) return;
 
-  if (elHUD) {
-    if (restante <= 0) {
-      elHUD.innerHTML = "⏳ 00:00";
-      finalizarPorTiempo();
-    } else {
-      const min = Math.floor(restante / 60000);
-      const sec = Math.floor((restante % 60000) / 1000);
-      elHUD.innerHTML = `⏱️ Fin en: ${min}:${sec.toString().padStart(2, '0')}`;
-    }
+  elHUD.style.display = "block";
+
+  if (restante <= 0) {
+    elHUD.innerHTML = "⏳ 00:00";
+    finalizarPorTiempo();
+  } else {
+    const min = Math.floor(restante / 60000);
+    const sec = Math.floor((restante % 60000) / 1000);
+    elHUD.innerHTML = `⏱️ Fin en: ${min}:${sec.toString().padStart(2, '0')}`;
   }
 }
 
