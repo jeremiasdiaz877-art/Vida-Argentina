@@ -373,7 +373,8 @@ function aplicarGating() {
     if (aviso) {
       const nombre = estado.jugadores[estado.jugadorActual].nombre;
       aviso.style.display = "block";
-      aviso.innerHTML = `⏳ Es el turno de <strong>${nombre}</strong>. Esperá el tuyo...`;
+      aviso.innerHTML = `⏳ Es el turno de <strong>${nombre}</strong>. Esperá el tuyo...
+      <br><button id="btn-forzar-pase" class="btn btn-rojo btn-sm" style="display:none; margin: 12px auto 0; padding: 6px 16px;" onclick="siguienteTurno(true)">Saltar turno de ${nombre}</button>`;
     }
   }
 }
@@ -593,6 +594,7 @@ function seleccionarCarrera(idx) {
 
   if (estado.setupJugadorIdx >= estado.jugadores.length) {
     if (online.activo) {
+      estado.inicioPartida = Date.now(); // reloj global de partida
       estado.faseOnline = "jugando";
       estado.jugadorActual = 0;
       estado.ronda = 1;
@@ -618,6 +620,7 @@ function iniciarJuego() {
   estado.ronda = 1;
   estado.terminado = null;
   partidaTerminada = false;
+  estado.inicioPartida = Date.now(); // reloj global de partida
   initMercado();
   track("partida_iniciada", { modo: "local", jugadores: estado.jugadores.length });
   mostrarPantalla("pantalla-juego");
@@ -834,6 +837,7 @@ function iniciarTimerTurno() {
   timerTurno = setInterval(() => {
     segundosTurno--;
     actualizarTimerDisplay();
+    checkTiempoGlobal(); // reloj global de partida
     if (segundosTurno <= 0) {
       detenerTimerTurno();
       turnoAgotado();
@@ -853,6 +857,12 @@ function actualizarTimerDisplay() {
   el.textContent = `⏱ ${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
   el.style.color = s <= 30 ? "var(--rojo)" : "var(--azul)";
   el.style.fontWeight = s <= 30 ? "800" : "600";
+
+  // Mostrar botón si el tiempo llegó a 0 y es el turno del otro
+  if (s <= 0 && online.activo && !esMiTurno()) {
+    const btnForzar = document.getElementById("btn-forzar-pase");
+    if (btnForzar) btnForzar.style.display = "block";
+  }
 }
 
 function cerrarTodosModales() {
@@ -933,18 +943,18 @@ function procesarTurno(dado, auto) {
   let empresasRiesgo = []; // avisos de empresas con problemas este mes
   j.empresas.forEach(e => {
     const suerte = Math.random();
-    if (suerte < 0.10) {
-      // Mal mes (10%): en vez de ganar, la empresa genera pérdida (entre 0.8x y 1.5x el retorno)
+    if (suerte < 0.04) {
+      // Mal mes (4%): en vez de ganar, la empresa genera pérdida (entre 0.8x y 1.5x el retorno)
       const perdida = Math.round(e.retornoPorTurno * (0.8 + Math.random() * 0.7));
       retornoEmpresa -= perdida;
       empresasRiesgo.push({ nombre: e.nombre, emoji: e.emoji, tipo: "perdida", monto: -perdida });
-    } else if (suerte < 0.25) {
-      // Mes flojo (15%): rinde solo el 40%
+    } else if (suerte < 0.12) {
+      // Mes flojo (8%): rinde solo el 40%
       const flojo = Math.round(e.retornoPorTurno * 0.4);
       retornoEmpresa += flojo;
       empresasRiesgo.push({ nombre: e.nombre, emoji: e.emoji, tipo: "flojo", monto: flojo });
     } else {
-      // Mes normal (75%)
+      // Mes normal (88%)
       retornoEmpresa += e.retornoPorTurno;
     }
   });
@@ -1352,8 +1362,8 @@ function capacidadEndeudamiento(j) {
   return Math.max(0, Math.round(total));
 }
 
-function siguienteTurno() {
-  if (!esMiTurno()) return; // online: solo el jugador del turno puede pasar
+function siguienteTurno(forzar = false) {
+  if (online.activo && !esMiTurno() && !forzar) return; // online: solo el jugador del turno puede pasar (o forzar)
   detenerTimerTurno(); // se frena al pasar el turno (se reinicia en el próximo)
   do {
     estado.jugadorActual = (estado.jugadorActual + 1) % estado.jugadores.length;
@@ -2464,3 +2474,47 @@ function verFinanzas(idx) {
 actualizarUIAuth();
 // Si quedó una partida sin terminar, muestra el botón "Continuar"
 restaurarPartida();
+
+// ==================== RELOJ GLOBAL DE PARTIDA ====================
+function checkTiempoGlobal() {
+  if (!estado.inicioPartida || partidaTerminada) return;
+  
+  const limiteMs = 35 * 60 * 1000; // 35 minutos
+  const transcurrido = Date.now() - estado.inicioPartida;
+  const restante = limiteMs - transcurrido;
+
+  let elHUD = document.getElementById("reloj-global");
+  if (!elHUD) {
+    const header = document.getElementById("jugadores-hud");
+    if (header) {
+      elHUD = document.createElement("div");
+      elHUD.id = "reloj-global";
+      elHUD.style.cssText = "background:var(--rojo); color:white; padding:8px 16px; border-radius:12px; font-weight:800; font-size:14px; margin-right:10px; display:flex; align-items:center; flex-shrink:0; box-shadow:0 4px 10px rgba(214,48,49,0.3);";
+      header.prepend(elHUD);
+    }
+  }
+
+  if (elHUD) {
+    if (restante <= 0) {
+      elHUD.innerHTML = "⏳ 00:00";
+      finalizarPorTiempo();
+    } else {
+      const min = Math.floor(restante / 60000);
+      const sec = Math.floor((restante % 60000) / 1000);
+      elHUD.innerHTML = `⏱️ Fin en: ${min}:${sec.toString().padStart(2, '0')}`;
+    }
+  }
+}
+
+function finalizarPorTiempo() {
+  if (partidaTerminada) return;
+  
+  const vivos = estado.jugadores.filter(x => !x.eliminado);
+  if (vivos.length === 0) { finalizarPartida("gameover", null); return; }
+  
+  // Gana el que acumuló mayor patrimonio
+  const ganador = vivos.reduce((prev, current) => (calcularPatrimonio(prev) > calcularPatrimonio(current)) ? prev : current);
+  
+  alert("⏱️ ¡TIEMPO AGOTADO!\nSe cumplieron los 35 minutos de partida.\nEl ganador se define por quién tiene el mayor patrimonio total (Caja + Activos).");
+  finalizarPartida("victoria", ganador);
+}
