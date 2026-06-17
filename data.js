@@ -7,13 +7,11 @@ const MESES_POR_ANIO_CARRERA = 3; // cada año de carrera dura 3 turnos
 
 // Calcula el costo de un "gasto grande" (gusto) según el patrimonio del jugador.
 // Te cobra el precio COMPLETO solo si tu patrimonio es >= 1.5x el precio; si no, proporcional.
-// Es un gasto al contado: nunca te cobra más que tu saldo disponible (no te puede fundir).
+// Sin tope de saldo: si el gasto supera tu caja, quedás en rojo y tenés que liquidar activos (o usar el seguro).
 function gastoGrande(saldo, patrimonio, precio) {
   const p = Math.max(0, patrimonio || 0);
-  const s = Math.max(0, saldo || 0);
   const factor = Math.min(1, p / (precio * 1.5)); // 1 cuando patrimonio >= 1.5x precio
-  const monto = Math.round(precio * factor);
-  return Math.min(monto, s);
+  return Math.round(precio * factor);
 }
 
 const PROVINCIAS = [
@@ -67,13 +65,13 @@ const EVENTOS = [
   { emoji: "💲", titulo: "El dólar blue te favoreció", desc: "Compraste barato y vendiste caro. La brecha te dejó ganancia.", impacto: (s) => 170000, tipo: "pos" },
   { emoji: "🪙", titulo: "Blanqueo conveniente", desc: "Regularizaste ahorros con beneficios impositivos. Te quedó plata.", impacto: (s) => 220000, tipo: "pos" },
   { emoji: "📈", titulo: "Ascenso laboral", desc: "Te promovieron a un mejor puesto. Más responsabilidad, más plata.", impacto: (s) => Math.round(s * 0.13), tipo: "pos" },
-  { emoji: "🏦", titulo: "Reintegro de Ganancias", desc: "AFIP te devolvió retenciones de más. ¡Plata que vuelve!", impacto: (s) => 130000, tipo: "pos" },
+  { emoji: "🏦", titulo: "Reintegro de Ganancias", desc: "AFIP te devolvió retenciones de más. ¡Plata que vuelve!", impacto: (s) => 130000, tipo: "pos", soloRI: true },
   { emoji: "🎉", titulo: "Ganaste el Quini 6", desc: "¡Acertaste varios números! Un golpe de suerte enorme.", impacto: (s) => 350000, tipo: "pos" },
   { emoji: "💳", titulo: "Reintegro de la tarjeta", desc: "Promo bancaria y cashback: te devolvieron un montón en compras.", impacto: (s) => 60000, tipo: "pos" },
   { emoji: "🚀", titulo: "Tu emprendimiento despegó", desc: "Un proyecto propio empezó a facturar fuerte este mes.", impacto: (s) => 240000, tipo: "pos" },
   { emoji: "🤑", titulo: "Cliente grande", desc: "Cerraste un contrato importante. Entró un buen adelanto.", impacto: (s) => Math.round(s * 0.11), tipo: "pos" },
   { emoji: "🏅", titulo: "Bono por productividad", desc: "El equipo cumplió los objetivos y repartieron premios.", impacto: (s) => 110000, tipo: "pos" },
-  { emoji: "🧾", titulo: "IVA a favor", desc: "Te quedó saldo a favor de IVA en ARCA. ¡Plata que vuelve!", impacto: (s) => 90000, tipo: "pos" },
+  { emoji: "🧾", titulo: "IVA a favor", desc: "Te quedó saldo a favor de IVA en ARCA. ¡Plata que vuelve!", impacto: (s) => 90000, tipo: "pos", soloRI: true },
   { emoji: "📋", titulo: "Reintegro de percepciones", desc: "Te devolvieron percepciones que te habían cobrado de más.", impacto: (s) => 70000, tipo: "pos" },
   { emoji: "🪙", titulo: "Saldo a favor liberado", desc: "ARCA te liberó un crédito fiscal acumulado.", impacto: (s) => 100000, tipo: "pos" },
   { emoji: "🏆", titulo: "¡La Scaloneta salió campeón!", desc: "El país festeja y la gente sale a consumir. Tu negocio vendió como nunca.", impacto: (s) => 200000, tipo: "pos" },
@@ -85,23 +83,23 @@ const EVENTOS = [
   // NEGATIVOS
   { emoji: "💥", titulo: "Devaluación del peso", desc: "El gobierno devaluó. Tus pesos perdieron poder adquisitivo.", impacto: (s) => -Math.round(s * 0.12), tipo: "neg" },
   { emoji: "🚨", titulo: "Multa de AFIP", desc: "Te llegó una intimación de AFIP. Facturaste de más sin declarar.", impacto: (s) => -150000, tipo: "neg" },
-  { emoji: "🏥", titulo: "Gasto médico imprevisto", desc: "Una enfermedad o accidente te generó gastos médicos.", impacto: (s) => -200000, tipo: "neg" },
-  { emoji: "🚗", titulo: "Choque de auto", desc: "Tuviste un accidente. El seguro no cubrió todo.", impacto: (s) => -180000, tipo: "neg" },
-  { emoji: "🔥", titulo: "Robo en casa", desc: "Te robaron. Perdiste cosas de valor y pagaste el arreglo.", impacto: (s) => -250000, tipo: "neg" },
+  { emoji: "🏥", titulo: "Gasto médico imprevisto", desc: "Una enfermedad o accidente te generó gastos médicos fuertes.", impacto: (s, p) => -Math.max(200000, Math.round((p || 0) * 0.05)), tipo: "neg" },
+  { emoji: "🚗", titulo: "Choque de auto", desc: "Tuviste un accidente severo. El seguro no cubrió todo el desastre.", impacto: (s, p) => -Math.max(180000, Math.round((p || 0) * 0.04)), tipo: "neg" },
+  { emoji: "🔥", titulo: "Robo en casa", desc: "Te desvalijaron. Perdiste cosas de valor y pagaste el arreglo.", impacto: (s, p) => -Math.max(250000, Math.round((p || 0) * 0.06)), tipo: "neg" },
   { emoji: "📉", titulo: "Crisis política", desc: "La inestabilidad política afectó tu negocio o inversiones.", impacto: (s) => -Math.round(s * 0.08), tipo: "neg" },
   { emoji: "🌡️", titulo: "Inflación récord", desc: "Los precios subieron más que tu sueldo. Tu poder de compra cayó.", impacto: (s) => -Math.round(s * 0.10), tipo: "neg" },
   { emoji: "🏦", titulo: "Cepo cambiario", desc: "El gobierno restringió el acceso al dólar. Perdiste en el blue.", impacto: (s) => -100000, tipo: "neg" },
   { emoji: "⚡", titulo: "Tarifazo de servicios", desc: "Subieron luz, gas y agua. Tus gastos fijos pegaron el salto.", impacto: (s) => -80000, tipo: "neg" },
   { emoji: "🏚️", titulo: "Alquiler aumentó", desc: "Tu propietario aplicó el ajuste por inflación. Pagás más.", impacto: (s) => -90000, tipo: "neg" },
   { emoji: "📊", titulo: "Huelga en tu sector", desc: "Hubo un paro. No cobraste completo este mes.", impacto: (s) => -Math.round(s * 0.15), tipo: "neg" },
-  { emoji: "🌊", titulo: "Inundación", desc: "Tu zona sufrió inundaciones. Gastos de reparación y pérdidas.", impacto: (s) => -220000, tipo: "neg" },
+  { emoji: "🌊", titulo: "Inundación en tu negocio", desc: "Pérdida de stock y daños estructurales graves.", impacto: (s, p) => -Math.max(220000, Math.round((p || 0) * 0.08)), tipo: "neg" },
   { emoji: "💳", titulo: "Deuda de tarjeta", desc: "Las cuotas se acumularon. Este mes pagás más de lo esperado.", impacto: (s) => -120000, tipo: "neg" },
   { emoji: "🏢", titulo: "Despido", desc: "Te echaron del trabajo. Cobrás indemnización pero perdés ingreso.", impacto: (s) => -Math.round(s * 0.20), tipo: "neg" },
   { emoji: "🦠", titulo: "Pandemia / Cuarentena", desc: "Restricciones afectaron tu actividad. Ingresos reducidos.", impacto: (s) => -Math.round(s * 0.18), tipo: "neg" },
   { emoji: "📰", titulo: "Corralito bancario", desc: "El banco frenó los retiros. No podés acceder a tu plata.", impacto: (s) => -Math.round(s * 0.25), tipo: "neg" },
-  { emoji: "🧾", titulo: "Pago de IVA", desc: "Liquidaste el IVA del mes y tocó pagarle a ARCA.", impacto: (s) => -110000, tipo: "neg" },
+  { emoji: "🧾", titulo: "Pago de IVA", desc: "Liquidaste el IVA del mes y tocó pagarle a ARCA.", impacto: (s) => -110000, tipo: "neg", soloRI: true },
   { emoji: "📑", titulo: "Ingresos Brutos (IIBB)", desc: "Pagaste Ingresos Brutos provinciales este mes.", impacto: (s) => -80000, tipo: "neg" },
-  { emoji: "🏛️", titulo: "Anticipo de Ganancias", desc: "ARCA te cobró un anticipo del impuesto a las Ganancias.", impacto: (s) => -130000, tipo: "neg" },
+  { emoji: "🏛️", titulo: "Anticipo de Ganancias", desc: "ARCA te cobró un anticipo del impuesto a las Ganancias.", impacto: (s) => -130000, tipo: "neg", soloRI: true },
   { emoji: "💼", titulo: "Retención impositiva", desc: "Un cliente te retuvo impuestos al pagarte.", impacto: (s) => -60000, tipo: "neg" },
   // Gastos grandes (gustos): te cobran el precio COMPLETO solo si tu patrimonio es >= 1.5x el precio.
   // Si tenés menos, pagás la parte proporcional. Y como es un gasto al contado, nunca te cobran más que tu saldo.
@@ -192,7 +190,7 @@ const NOTICIAS = [
 ];
 
 const CARAS_DADO = ["⚀", "⚁", "⚂", "⚃", "⚄", "⚅"];
-const META_VICTORIA = 1000000000;
+const META_VICTORIA = 500000000;
 
 // Multiplicador de los beneficios de eventos positivos (+10%)
 const BONUS_BENEFICIOS = 1.10;

@@ -997,11 +997,13 @@ function procesarTurno(dado, auto) {
   aplicarNoticia();
   actualizarMercadoPanel();
 
-  // Liquidación mensual de IVA (solo Responsables Inscriptos): Débito (ventas) vs Crédito (compras)
-  let pagoIva = 0, ivaUsadoAFavor = 0;
-  if (j._estadoImpositivo === "Responsable Inscripto") {
-    const ivaDebito = (retornoEmpresa > 0 ? retornoEmpresa : 0) * 0.21; // 21% sobre ventas de empresas
-    const ivaCredito = (gastosFijos * 0.5) * 0.21; // la mitad de los gastos fijos tienen IVA discriminado
+  // Liquidación impositiva mensual según el régimen del jugador
+  const esRI = j._estadoImpositivo === "Responsable Inscripto";
+  let pagoIva = 0, ivaUsadoAFavor = 0, pagoMonotributo = 0;
+  if (esRI) {
+    // Responsable Inscripto: IVA mensual = Débito (ventas) − Crédito (compras)
+    const ivaDebito = retornoEmpresa * 0.21; // ventas: si la empresa pierde, el débito es negativo (genera crédito)
+    const ivaCredito = (gastosFijos * 0.40) * 0.21; // crédito fiscal por gastos operativos con IVA
     const posicionMensual = Math.round(ivaDebito - ivaCredito);
     if (posicionMensual > 0) {
       const aFavor = j._saldoIvaAFavor || 0;
@@ -1017,11 +1019,17 @@ function procesarTurno(dado, auto) {
       // Más compras que ventas: se acumula saldo a favor técnico para el mes siguiente
       j._saldoIvaAFavor = (j._saldoIvaAFavor || 0) + Math.abs(posicionMensual);
     }
+  } else {
+    // Monotributista: cuota fija mensual según categoría (incluye impuesto + jubilación + obra social)
+    const reg = j._estadoImpositivo || "Monotributo (Cat. A)";
+    if (reg.includes("Cat. C")) pagoMonotributo = 50000;
+    else if (reg.includes("Cat. H")) pagoMonotributo = 100000;
+    else pagoMonotributo = 25000; // Cat. A o por defecto
   }
 
   const saldoAntes = j.saldo;
   const ingresado = ingresoSueldo + retornoEmpresa + alquiler;
-  const gastos = gastosFijos + cuotaTotal + costoCarrera + primaSeguro + pagoIva;
+  const gastos = gastosFijos + cuotaTotal + costoCarrera + primaSeguro + pagoIva + pagoMonotributo;
   j.saldo += ingresado - gastos;
 
   // Acumular para la liquidación semestral
@@ -1034,8 +1042,9 @@ function procesarTurno(dado, auto) {
   // Los eventos reciben (saldo, patrimonio): los gastos grandes usan el patrimonio
   let evento = null, impactoEvento = 0;
   const patri = calcularPatrimonio(j);
-  const positivos = EVENTOS.filter(e => e.tipo === "pos");
-  const negativos = EVENTOS.filter(e => e.tipo === "neg");
+  // Los eventos fiscales de IVA/Ganancias (soloRI) solo le aparecen al Responsable Inscripto
+  const positivos = EVENTOS.filter(e => e.tipo === "pos" && (!e.soloRI || esRI));
+  const negativos = EVENTOS.filter(e => e.tipo === "neg" && (!e.soloRI || esRI));
   if (dado <= 2) {
     // 1-2: evento negativo
     evento = negativos[Math.floor(Math.random() * negativos.length)];
@@ -1051,11 +1060,18 @@ function procesarTurno(dado, auto) {
     evento = positivos[Math.floor(Math.random() * positivos.length)];
     impactoEvento = Math.round(evento.impacto(j.saldo, patri) * BONUS_BENEFICIOS);
   }
+  let eventoIvaAFavor = false;
   if (evento) {
-    j.saldo += impactoEvento;
-    // Si sufriste una retención, queda como saldo a cuenta del impuesto del semestre
-    if (evento.titulo === "Retención impositiva") {
-      j._acumRetenciones = (j._acumRetenciones || 0) + Math.abs(impactoEvento);
+    if (evento.titulo === "IVA a favor" && esRI) {
+      // El IVA a favor NO es plata en mano: va a tu cuenta de ARCA (saldo a favor técnico)
+      j._saldoIvaAFavor = (j._saldoIvaAFavor || 0) + Math.abs(impactoEvento);
+      eventoIvaAFavor = true;
+    } else {
+      j.saldo += impactoEvento;
+      // Si sufriste una retención, queda como saldo a cuenta del impuesto del semestre
+      if (evento.titulo === "Retención impositiva") {
+        j._acumRetenciones = (j._acumRetenciones || 0) + Math.abs(impactoEvento);
+      }
     }
   }
 
@@ -1066,11 +1082,10 @@ function procesarTurno(dado, auto) {
     baseImpuesto = Math.max(0, (j._acumIngresos || 0) - (j._acumDeducciones || 0));
     const LIMITE_MONOTRIBUTO = 15000000; // tope de facturación semestral (valor de juego)
     if (baseImpuesto <= LIMITE_MONOTRIBUTO) {
-      // Monotributo: cuota fija según categoría
+      // Monotributo: la cuota ya se cobra mes a mes, así que en la liquidación semestral NO paga Ganancias.
+      // El semestre solo lo recategoriza (le actualiza la letra según cuánto facturó).
       const categoria = baseImpuesto <= 5000000 ? "A" : (baseImpuesto <= 10000000 ? "C" : "H");
-      if (categoria === "A") impuestoDeterminado = 150000;
-      else if (categoria === "C") impuestoDeterminado = 300000;
-      else impuestoDeterminado = 600000;
+      impuestoDeterminado = 0;
       j._estadoImpositivo = `Monotributo (Cat. ${categoria})`;
     } else {
       // Responsable Inscripto: tope del Monotributo + 30% del excedente (sin salto brusco)
@@ -1100,7 +1115,7 @@ function procesarTurno(dado, auto) {
   j._resumen = {
     saldoAntes, ingresoSueldo, retornoEmpresa, alquiler, empresasRiesgo,
     gastosFijos, interesPrestamos, amortizacion, costoCarrera, primaSeguro,
-    pagoIva, ivaUsadoAFavor, saldoIva: j._saldoIvaAFavor,
+    pagoIva, ivaUsadoAFavor, saldoIva: j._saldoIvaAFavor, pagoMonotributo, eventoIvaAFavor,
     evento, impactoEvento, impuesto, baseImpuesto, estadoImpositivo: j._estadoImpositivo, saldoDespues: j.saldo
   };
 
@@ -1146,6 +1161,7 @@ function mostrarResumenTurno(j) {
       <div class="evento-impacto ${r.impactoEvento >= 0 ? "impacto-pos" : "impacto-neg"}">
         ${r.impactoEvento >= 0 ? "+" : ""}${fmt(r.impactoEvento)}
       </div>
+      ${r.eventoIvaAFavor ? `<div style="font-size:11px;color:var(--gris-dark);margin-top:4px;">↳ va a tu saldo a favor de IVA, no a la caja</div>` : ""}
     </div>`;
   }
 
@@ -1183,14 +1199,18 @@ function mostrarResumenTurno(j) {
 
   if (j.meses > 0 && j.meses % 6 === 0) {
     const regimenStr = j._estadoImpositivo || "Régimen impositivo";
+    const esRIliq = regimenStr === "Responsable Inscripto";
     const retencionesStr = (j._ultimasRetenciones > 0) ? `<br><span style="color:var(--verde);">Pago a cuenta (retenciones): −${fmt(j._ultimasRetenciones)}</span>` : "";
     const deduccionesStr = `<br><span style="font-size:12px;color:var(--gris-dark);">Se dedujeron ${fmt(j._ultimasDeducciones || 0)} por intereses, carrera y gastos de actividad.</span>`;
+    const titulo = esRIliq ? "🧾 Liquidación semestral de GANANCIAS" : "🔄 Recategorización de Monotributo";
+    const lineaPago = esRIliq
+      ? `Impuesto determinado: ${fmt(j._ultimoImpuestoDeterminado || 0)}${retencionesStr}<br>Saldo a pagar hoy: <strong style="color:var(--rojo);">${fmt(j._ultimoImpuesto || 0)}</strong>`
+      : `<span style="color:var(--verde);">No pagás Ganancias. Tu cuota mensual de Monotributo se ajusta a tu categoría.</span>`;
     html += `<div style="background:#fff3cd;border:1px solid #ffc107;border-radius:12px;padding:12px;margin-bottom:14px;font-size:13px;">
-      <strong>🧾 Recategorización y liquidación semestral</strong><br>
+      <strong>${titulo}</strong><br>
       Base imponible neta: <strong>${fmt(j._ultimaBaseImpuesto || 0)}</strong>${deduccionesStr}<br>
-      Categoría actual: <strong>${regimenStr}</strong><br>
-      Impuesto determinado: ${fmt(j._ultimoImpuestoDeterminado || 0)}${retencionesStr}<br>
-      Saldo a pagar hoy: <strong style="color:var(--rojo);">${fmt(j._ultimoImpuesto || 0)}</strong>
+      Tu condición: <strong>${regimenStr}</strong><br>
+      ${lineaPago}
     </div>`;
   }
 
@@ -1205,8 +1225,9 @@ function mostrarResumenTurno(j) {
       ${linea("🏦 Amortización préstamos", r.amortizacion, true)}
       ${linea("🎓 Cuota de carrera", r.costoCarrera, true)}
       ${linea("🛡️ Prima del seguro", r.primaSeguro, true)}
+      ${r.pagoMonotributo > 0 ? linea("📝 Cuota de Monotributo", r.pagoMonotributo, true) : ""}
       ${r.pagoIva > 0 ? linea("🏛️ Pago de IVA mensual", r.pagoIva, true) : ""}
-      ${r.evento ? linea((r.impactoEvento >= 0 ? "🎁" : "⚠️") + " Evento", Math.abs(r.impactoEvento), r.impactoEvento < 0) : ""}
+      ${r.evento && !r.eventoIvaAFavor ? linea((r.impactoEvento >= 0 ? "🎁" : "⚠️") + " Evento", Math.abs(r.impactoEvento), r.impactoEvento < 0) : ""}
       ${r.impuesto > 0 ? linea(`🧾 Impuestos semestrales`, r.impuesto, true) : ""}
       <tr style="border-top:1px solid var(--gris-med);">
         <td style="padding:8px 0;font-weight:800;">Cambio del turno</td>
@@ -1455,22 +1476,14 @@ function mostrarVictoria(ganador) {
   detenerTimerTurno();
   limpiarPartidaGuardada();
   estado._ganador = ganador;
-  // Solo entra al Salón de la Fama quien REALMENTE llegó a la meta
-  const llegoALaMeta = calcularPatrimonio(ganador) >= META_VICTORIA;
-  if (!llegoALaMeta) {
-    mostrarPantallaVictoria(ganador);
-    return;
-  }
-  track("partida_ganada", { meses: ganador.meses || 0, patrimonio: calcularPatrimonio(ganador) });
+  const patr = calcularPatrimonio(ganador);
+  track("partida_terminada", { meses: ganador.meses || 0, patrimonio: patr });
+  // Solo los usuarios registrados entran al Salón de la Fama; se guarda su MAYOR patrimonio.
   const sesion = getSesion();
-  if (sesion) {
-    // Usuario logueado: récord ligado a su cuenta (usuario)
-    guardarGanador(sesion.nombre, calcularPatrimonio(ganador), ganador.meses || 0, sesion.usuario || sesion.nombre);
-    mostrarPantallaVictoria(ganador);
-  } else {
-    document.getElementById("modal-registro").style.display = "flex";
-    document.getElementById("reg-nombre").value = ganador.nombre;
+  if (sesion && patr > 0) {
+    guardarGanador(sesion.nombre, patr, ganador.meses || 0, sesion.usuario || sesion.nombre);
   }
+  mostrarPantallaVictoria(ganador);
 }
 
 function guardarRegistro() {
@@ -1514,19 +1527,19 @@ function leerRankingLocal() {
   }
 }
 
-// Guarda el récord local del jugador (una entrada por jugador, su mejor tiempo)
+// Guarda el récord local del jugador (una entrada por jugador, su MAYOR patrimonio)
 function guardarLocal(nombre, patrimonio, meses, jugadorKey) {
   try {
     const ranking = leerRankingLocal();
     const prev = ranking.find(r => (r.jugador || (r.nombre || "").toLowerCase()) === jugadorKey);
     if (prev) {
-      if ((meses || 0) < (prev.meses || 999999)) {
+      if ((patrimonio || 0) > (prev.patrimonio || 0)) {
         prev.nombre = nombre; prev.patrimonio = patrimonio; prev.meses = meses || 0; prev.jugador = jugadorKey; prev.fecha = new Date().toISOString();
       }
     } else {
       ranking.push({ nombre, patrimonio, meses: meses || 0, jugador: jugadorKey, fecha: new Date().toISOString() });
     }
-    ranking.sort((a, b) => (a.meses || 999999) - (b.meses || 999999));
+    ranking.sort((a, b) => (b.patrimonio || 0) - (a.patrimonio || 0));
     localStorage.setItem(RANKING_KEY, JSON.stringify(ranking.slice(0, 50)));
   } catch (e) {
     console.warn("No se pudo guardar el ranking local:", e);
@@ -1542,13 +1555,13 @@ async function guardarGanador(nombre, patrimonio, meses, jugadorKey) {
   const H = { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}`, "Content-Type": "application/json", "Prefer": "return=minimal" };
   try {
     // ¿ya tiene un récord este jugador?
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/ranking?jugador=eq.${encodeURIComponent(jugadorKey)}&select=meses`,
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/ranking?jugador=eq.${encodeURIComponent(jugadorKey)}&select=patrimonio`,
       { headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}` } });
     const existentes = res.ok ? await res.json() : [];
     if (existentes.length > 0) {
-      const mejor = Math.min(...existentes.map(e => e.meses || 999999));
-      if (meses < mejor) {
-        // mejoró su récord: actualizar
+      const mejor = Math.max(...existentes.map(e => e.patrimonio || 0));
+      if (patrimonio > mejor) {
+        // superó su récord de patrimonio: actualizar
         await fetch(`${SUPABASE_URL}/rest/v1/ranking?jugador=eq.${encodeURIComponent(jugadorKey)}`,
           { method: "PATCH", headers: H, body: JSON.stringify({ nombre, patrimonio, meses, fecha: new Date().toISOString() }) });
       }
@@ -1566,7 +1579,7 @@ async function guardarGanador(nombre, patrimonio, meses, jugadorKey) {
 // ---- Leer el ranking global desde la base de datos (ordenado por tiempo) ----
 async function obtenerRankingRemoto() {
   const res = await fetch(
-    `${SUPABASE_URL}/rest/v1/ranking?select=nombre,patrimonio,meses,jugador,fecha&meses=gt.0&order=meses.asc&limit=50`,
+    `${SUPABASE_URL}/rest/v1/ranking?select=nombre,patrimonio,meses,jugador,fecha&patrimonio=gt.0&order=patrimonio.desc&limit=50`,
     { headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}` } }
   );
   if (!res.ok) throw new Error("Error al leer el ranking");
@@ -1585,8 +1598,8 @@ function fmtTiempo(meses) {
 function renderRanking(ranking, esGlobal) {
   const cont = document.getElementById("ranking-contenido");
   const posEmojis = ["🥇", "🥈", "🥉"];
-  ranking = (ranking || []).filter(g => (g.meses || 0) > 0).sort((a, b) => a.meses - b.meses);
-  // Una entrada por jugador: nos quedamos con su mejor tiempo (el primero, ya ordenado)
+  ranking = (ranking || []).filter(g => (g.patrimonio || 0) > 0).sort((a, b) => (b.patrimonio || 0) - (a.patrimonio || 0));
+  // Una entrada por jugador: nos quedamos con su mayor patrimonio (el primero, ya ordenado)
   const vistos = new Set();
   ranking = ranking.filter(g => {
     const clave = (g.jugador || g.nombre || "").trim().toLowerCase();
@@ -1598,17 +1611,17 @@ function renderRanking(ranking, esGlobal) {
     cont.innerHTML = `<div style="text-align:center;color:var(--gris-dark);padding:24px 8px;">
       <div style="font-size:44px;margin-bottom:8px;">🏅</div>
       <div style="font-weight:700;color:var(--azul);">Todavía no hay campeones</div>
-      <div style="font-size:13px;margin-top:4px;">¡Llegá a ${fmt(META_VICTORIA)} y registrate para aparecer acá!</div>
+      <div style="font-size:13px;margin-top:4px;">¡Jugá una partida con tu cuenta y tu mayor patrimonio aparecerá acá!</div>
     </div>`;
     return;
   }
   cont.innerHTML = `
-    <p style="font-size:13px;color:var(--gris-dark);margin-bottom:12px;">${esGlobal ? "🌍" : "📱"} Quién llegó más rápido a ${fmt(META_VICTORIA)} ${esGlobal ? "(global)" : "(este dispositivo)"}</p>
+    <p style="font-size:13px;color:var(--gris-dark);margin-bottom:12px;">${esGlobal ? "🌍" : "📱"} Mayor patrimonio alcanzado ${esGlobal ? "(global)" : "(este dispositivo)"}</p>
     ${ranking.map((g, i) => `
       <div class="ranking-item" style="max-width:none;">
         <span class="ranking-pos">${posEmojis[i] || (i + 1) + "º"}</span>
         <span class="ranking-nombre" style="flex:1;margin:0 10px;">${g.nombre}</span>
-        <span class="ranking-saldo" style="white-space:nowrap;">⏱ ${fmtTiempo(g.meses)}</span>
+        <span class="ranking-saldo" style="white-space:nowrap;font-weight:700;">${fmt(g.patrimonio)}</span>
       </div>
     `).join("")}`;
 }
@@ -1751,7 +1764,9 @@ function mostrarPantallaVictoria(ganador) {
 
   const ranking = [...estado.jugadores].sort((a, b) => calcularPatrimonio(b) - calcularPatrimonio(a));
   const posEmojis = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣", "6️⃣", "7️⃣"];
-  document.getElementById("ranking-final").innerHTML = ranking.map((j, i) => `
+  // Si no hay sesión, invitamos a registrarse (solo los registrados entran al ranking global)
+  const hint = getSesion() ? "" : `<div style="background:#eaf4ff;border:1px solid var(--celeste);border-radius:10px;padding:10px;margin-bottom:10px;font-size:12px;color:var(--azul);text-align:center;">🏆 Iniciá sesión para guardar tu patrimonio en el Salón de la Fama global.</div>`;
+  document.getElementById("ranking-final").innerHTML = hint + ranking.map((j, i) => `
     <div class="ranking-item">
       <span class="ranking-pos">${posEmojis[i]}</span>
       <span class="ranking-nombre">${j.avatar} ${j.nombre}</span>
@@ -2481,8 +2496,8 @@ function abrirTributos() {
   // Explicación de los regímenes
   html += `<div style="background:var(--gris);border-radius:12px;padding:12px;font-size:12px;color:var(--gris-dark);line-height:1.6;">
     <strong>¿Cómo tributás?</strong><br>
-    🧾 <strong>Monotributo</strong>: hasta ${fmt(15000000)} de base semestral. Cuota fija ($150k Cat. A / $300k Cat. C / $600k Cat. H). Todo unificado.<br>
-    🏛️ <strong>Responsable Inscripto</strong>: si superás ese tope. Pagás Ganancias (tope + 30% del excedente) <em>y</em> liquidás <strong>IVA mensual</strong> (Débito por ventas − Crédito por compras).<br>
+    🧾 <strong>Monotributo</strong>: hasta ${fmt(15000000)} de base semestral. Cuota fija <strong>mensual</strong> ($25k Cat. A / $50k Cat. C / $100k Cat. H). Todo unificado, no pagás Ganancias ni IVA aparte.<br>
+    🏛️ <strong>Responsable Inscripto</strong>: si superás ese tope. Pagás Ganancias semestral (tope + 30% del excedente) <em>y</em> liquidás <strong>IVA mensual</strong> (Débito por ventas − Crédito por compras).<br>
     💡 Las <strong>deducciones</strong> (intereses, carrera, gastos) bajan la base. Las <strong>retenciones</strong> son plata que ya pagaste a cuenta del impuesto.
   </div>`;
 
@@ -2553,13 +2568,13 @@ function verFinanzas(idx) {
   // ===== Estado de Resultados (último mes) =====
   const r = j._resumen;
   if (r) {
-    const evPos = r.impactoEvento > 0 ? r.impactoEvento : 0;
+    const evPos = (r.impactoEvento > 0 && !r.eventoIvaAFavor) ? r.impactoEvento : 0; // el IVA a favor no es ingreso de caja
     const evNeg = r.impactoEvento < 0 ? -r.impactoEvento : 0;
     // Las empresas pueden tener un mal mes: si el retorno es negativo, va a EGRESOS (pérdida)
     const empPos = (r.retornoEmpresa || 0) > 0 ? r.retornoEmpresa : 0;
     const empNeg = (r.retornoEmpresa || 0) < 0 ? -r.retornoEmpresa : 0;
     const totalIng = (r.ingresoSueldo || 0) + empPos + (r.alquiler || 0) + evPos;
-    const totalEgr = (r.gastosFijos || 0) + (r.interesPrestamos || 0) + (r.amortizacion || 0) + (r.costoCarrera || 0) + (r.impuesto || 0) + evNeg + empNeg + (r.primaSeguro || 0) + (r.pagoIva || 0);
+    const totalEgr = (r.gastosFijos || 0) + (r.interesPrestamos || 0) + (r.amortizacion || 0) + (r.costoCarrera || 0) + (r.impuesto || 0) + evNeg + empNeg + (r.primaSeguro || 0) + (r.pagoIva || 0) + (r.pagoMonotributo || 0);
     const resultado = totalIng - totalEgr;
     html += `<div class="estado-box">
       <div class="estado-titulo">📈 Estado de Resultados — ${fechaJugador(j)}</div>
@@ -2577,6 +2592,7 @@ function verFinanzas(idx) {
         ${r.amortizacion ? fila("🏦 Amortización", r.amortizacion, "var(--rojo)") : ""}
         ${r.costoCarrera ? fila("🎓 Cuota de carrera", r.costoCarrera, "var(--rojo)") : ""}
         ${r.primaSeguro ? fila("🛡️ Prima del seguro", r.primaSeguro, "var(--rojo)") : ""}
+        ${r.pagoMonotributo ? fila("📝 Cuota de Monotributo", r.pagoMonotributo, "var(--rojo)") : ""}
         ${r.pagoIva ? fila("🏛️ IVA mensual (RI)", r.pagoIva, "var(--rojo)") : ""}
         ${r.impuesto ? fila("🧾 Impuesto a las Ganancias", r.impuesto, "var(--rojo)") : ""}
         ${evNeg ? fila("⚠️ Evento desfavorable", evNeg, "var(--rojo)") : ""}
