@@ -987,6 +987,10 @@ function procesarTurno(dado, auto) {
     interesPrestamos += interes;
     amortizacion += capital;
     p.principal -= capital;
+    // Línea revolvente del seguro: al devolver capital del rescate, se recupera la cobertura
+    if (p.tipo === "seguro" && j.seguro) {
+      j.seguro.cobertura = Math.min(j.seguro.coberturaTotal || j.seguro.cobertura, (j.seguro.cobertura || 0) + capital);
+    }
     // Si es un préstamo de otro jugador, el prestamista cobra la cuota
     if (p.tipo === "jugador" && p.acreedorId) {
       const acreedor = estado.jugadores.find(x => x.id === p.acreedorId);
@@ -1986,6 +1990,9 @@ function abrirPrestamos() {
     if (j.saldo < pago) { alert(`No te alcanza para pagar el mes (${fmt(pago)} = ${fmt(interes)} interés + ${fmt(capital)} capital). Tenés ${fmt(j.saldo)}.`); return; }
     j.saldo -= pago;
     p.principal -= capital;
+    if (p.tipo === "seguro" && j.seguro) {
+      j.seguro.cobertura = Math.min(j.seguro.coberturaTotal || j.seguro.cobertura, (j.seguro.cobertura || 0) + capital);
+    }
     if (p.tipo === "jugador" && p.acreedorId) {
       const ac = estado.jugadores.find(x => x.id === p.acreedorId);
       if (ac) ac.saldo += pago;
@@ -2011,6 +2018,9 @@ function abrirPrestamos() {
     if (p.tipo === "jugador" && p.acreedorId) {
       const ac = estado.jugadores.find(x => x.id === p.acreedorId);
       if (ac) ac.saldo += p.principal;
+    }
+    if (p.tipo === "seguro" && j.seguro) {
+      j.seguro.cobertura = Math.min(j.seguro.coberturaTotal || j.seguro.cobertura, (j.seguro.cobertura || 0) + p.principal);
     }
     j.saldo -= p.principal;
     j.prestamos.splice(idx, 1);
@@ -2097,7 +2107,7 @@ function abrirSeguro() {
 
   function render() {
     const j = estado.jugadores[estado.jugadorActual];
-    let html = `<p style="font-size:13px;color:var(--gris-dark);margin-bottom:14px;">Si quebrás y no te quedan activos para vender, tu seguro cubre el rojo (hasta su tope) y lo devolvés en cuotas con interés. Más cobertura = prima mensual más cara.</p>`;
+    let html = `<p style="font-size:13px;color:var(--gris-dark);margin-bottom:14px;">Si quebrás y no te quedan activos para vender, tu seguro cubre el rojo (hasta su tope) y lo devolvés en cuotas con interés. Es una <strong>línea revolvente</strong>: a medida que pagás esa deuda, la cobertura se recupera. Más cobertura = prima mensual más cara.</p>`;
 
     if (j.seguro) {
       const s = j.seguro;
