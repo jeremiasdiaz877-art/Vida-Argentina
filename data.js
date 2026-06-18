@@ -106,7 +106,49 @@ const EVENTOS = [
   { emoji: "🚗", titulo: "Te compraste un auto", desc: "Te diste el gusto de un 0km, acorde a lo que tu patrimonio bancaba.", impacto: (s, p) => -gastoGrande(s, p, 5000000), tipo: "neg" },
   { emoji: "✈️", titulo: "Viaje al exterior", desc: "Te fuiste de vacaciones acorde a tu patrimonio. Tarjetazo y a pagar.", impacto: (s, p) => -gastoGrande(s, p, 3500000), tipo: "neg" },
   { emoji: "🔧", titulo: "Se rompió el auto", desc: "Fuiste al mecánico y te arrancaron la cabeza con los repuestos.", impacto: (s, p) => -gastoGrande(s, p, 350000), tipo: "neg" },
-  { emoji: "📱", titulo: "Nuevo iPhone", desc: "Te tentaste con un celular nuevo, acorde a tu patrimonio.", impacto: (s, p) => -gastoGrande(s, p, 1500000), tipo: "neg" }
+  { emoji: "📱", titulo: "Nuevo iPhone", desc: "Te tentaste con un celular nuevo, acorde a tu patrimonio.", impacto: (s, p) => -gastoGrande(s, p, 1500000), tipo: "neg" },
+
+  // ======== EVENTOS-DECISIÓN (DILEMAS): te obligan a elegir, con riesgo/recompensa ========
+  {
+    emoji: "🤫", titulo: "El cliente 'creativo'", tipo: "decision",
+    desc: "Un cliente acepta tu abono fijo de $20.000/mes, pero te tira un fajo extra si lo ayudás a 'dibujar' comprobantes para evadir.",
+    opciones: [
+      { texto: "Aceptar el trato bajo la mesa", resolver: () => Math.random() < 0.70
+        ? { impacto: 180000, texto: "Salió redondo. Cobraste el extra y ARCA ni se enteró. Tu caja respira." }
+        : { impacto: -450000, texto: "¡Desastre! Cruzaron datos, detectaron la maniobra y te comiste una multa catastrófica." } },
+      { texto: "Rechazar por ética", resolver: () => ({ impacto: 0, texto: "Rechazaste la plata. No ganaste extra, pero dormís con la conciencia (y el CUIT) en paz." }) }
+    ]
+  },
+  {
+    emoji: "👟", titulo: "Oportunidad de stock relámpago", tipo: "decision",
+    desc: "Un distribuidor liquida un lote cerrado de calzado deportivo a mitad de precio. Hay que poner el efectivo HOY.",
+    opciones: [
+      { texto: "Reventar la caja y comprar todo", resolver: () => Math.random() < 0.60
+        ? { impacto: 350000, texto: "¡Un éxito! Ubicaste todo al precio de lista. Triplicaste la inversión." }
+        : { impacto: -150000, texto: "Clavado con el stock. Los talles eran difíciles y quedó la mercadería frenada." } },
+      { texto: "Dejar pasar la oportunidad", resolver: () => ({ impacto: 0, texto: "Cuidaste tu liquidez. El lote se lo llevó otro, pero seguís estable." }) }
+    ]
+  },
+  {
+    emoji: "🕵️", titulo: "Inspección sorpresa", tipo: "decision",
+    desc: "Cae un inspector municipal al local. Encuentra una falta menor y te insinúa que con 'algo' lo arregla en el momento.",
+    opciones: [
+      { texto: "Pagar la coima ($120.000)", resolver: () => ({ impacto: -120000, texto: "Pagaste y se fue silbando. Caro, pero te sacaste el problema de encima." }) },
+      { texto: "Negarte y arriesgar", resolver: () => Math.random() < 0.50
+        ? { impacto: 0, texto: "El inspector era honesto (o se asustó). No pasó nada." }
+        : { impacto: -400000, texto: "Te labró un acta y te clavó una multa mucho más cara que la coima." } }
+    ]
+  },
+  {
+    emoji: "📣", titulo: "Campaña de marketing", tipo: "decision",
+    desc: "Una agencia te ofrece una campaña agresiva en redes. Sale plata ahora, pero podría disparar las ventas.",
+    opciones: [
+      { texto: "Invertir $200.000 en la campaña", resolver: () => Math.random() < 0.55
+        ? { impacto: 500000, texto: "¡Se hizo viral! Las ventas explotaron y recuperaste la inversión con creces." }
+        : { impacto: -200000, texto: "La campaña no pegó. Gastaste la plata y casi no movió la aguja." } },
+      { texto: "No gastar en publicidad", resolver: () => ({ impacto: 0, texto: "Preferiste cuidar la caja. Tu negocio sigue como siempre." }) }
+    ]
+  }
 ];
 
 // Acciones: precio inicial, volatilidad (cuánto se mueve por turno) y drift (tendencia leve)

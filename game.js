@@ -874,6 +874,16 @@ function cerrarTodosModales() {
 function turnoAgotado() {
   if (online.activo && !esMiTurno()) return; // solo el jugador del turno auto-pasa
   cerrarTodosModales();
+  // Si se acabó el tiempo con un dilema abierto, se resuelve al azar y pasa el turno
+  if (decisionPendiente) {
+    const { evento, jugador } = decisionPendiente;
+    aplicarDecision(jugador, evento, Math.floor(Math.random() * evento.opciones.length));
+    decisionPendiente = null;
+    actualizarHUD();
+    if (online.activo) pushEstado();
+    siguienteTurno();
+    return;
+  }
   if (!turnoTirado) {
     // No tiró: se le tira automáticamente para que no pierda sus ingresos, y pasa
     const dado = Math.floor(Math.random() * 6) + 1;
@@ -1040,12 +1050,17 @@ function procesarTurno(dado, auto) {
 
   // El dado decide la suerte: bajo = malo, medio = neutro/chico, alto = bueno
   // Los eventos reciben (saldo, patrimonio): los gastos grandes usan el patrimonio
-  let evento = null, impactoEvento = 0;
+  let evento = null, impactoEvento = 0, esEventoDecision = false;
   const patri = calcularPatrimonio(j);
   // Los eventos fiscales de IVA/Ganancias (soloRI) solo le aparecen al Responsable Inscripto
   const positivos = EVENTOS.filter(e => e.tipo === "pos" && (!e.soloRI || esRI));
   const negativos = EVENTOS.filter(e => e.tipo === "neg" && (!e.soloRI || esRI));
-  if (dado <= 2) {
+  const decisiones = EVENTOS.filter(e => e.tipo === "decision" && (!e.soloRI || esRI));
+  // 30% de las veces aparece un DILEMA (rompe la predictibilidad del dado y obliga a decidir)
+  if (decisiones.length && Math.random() < 0.30) {
+    evento = decisiones[Math.floor(Math.random() * decisiones.length)];
+    esEventoDecision = true; // el impacto lo define la decisión del jugador, no el dado
+  } else if (dado <= 2) {
     // 1-2: evento negativo
     evento = negativos[Math.floor(Math.random() * negativos.length)];
     impactoEvento = evento.impacto(j.saldo, patri);
@@ -1061,7 +1076,7 @@ function procesarTurno(dado, auto) {
     impactoEvento = Math.round(evento.impacto(j.saldo, patri) * BONUS_BENEFICIOS);
   }
   let eventoIvaAFavor = false;
-  if (evento) {
+  if (evento && !esEventoDecision) {
     if (evento.titulo === "IVA a favor" && esRI) {
       // El IVA a favor NO es plata en mano: va a tu cuenta de ARCA (saldo a favor técnico)
       j._saldoIvaAFavor = (j._saldoIvaAFavor || 0) + Math.abs(impactoEvento);
@@ -1119,6 +1134,17 @@ function procesarTurno(dado, auto) {
     evento, impactoEvento, impuesto, baseImpuesto, estadoImpositivo: j._estadoImpositivo, saldoDespues: j.saldo
   };
 
+  // Si tocó un dilema, hay que resolverlo antes de cerrar el turno
+  if (esEventoDecision) {
+    if (auto) {
+      // Sin jugador (tiempo agotado / bot): se elige al azar y sigue
+      aplicarDecision(j, evento, Math.floor(Math.random() * evento.opciones.length));
+    } else {
+      mostrarModalDecision(evento, j); // el turno continúa en resolverDecision()
+      return;
+    }
+  }
+
   if (auto) {
     // Auto-pase por tiempo agotado: sin modal, verifica victoria y pasa
     if (online.activo) pushEstado();
@@ -1129,6 +1155,48 @@ function procesarTurno(dado, auto) {
 
   mostrarResumenTurno(j);
   if (online.activo) pushEstado(); // sincronizar el resultado del turno
+}
+
+// ==================== EVENTOS-DECISIÓN (DILEMAS) ====================
+let decisionPendiente = null;
+
+function mostrarModalDecision(evento, jugador) {
+  decisionPendiente = { evento, jugador };
+  document.getElementById("decision-emoji").textContent = evento.emoji;
+  document.getElementById("decision-titulo").textContent = evento.titulo;
+  document.getElementById("decision-desc").textContent = evento.desc;
+  const cont = document.getElementById("decision-opciones");
+  cont.innerHTML = "";
+  evento.opciones.forEach((opc, i) => {
+    const btn = document.createElement("button");
+    btn.className = "btn btn-secondary";
+    btn.textContent = opc.texto;
+    btn.onclick = () => resolverDecision(i);
+    cont.appendChild(btn);
+  });
+  document.getElementById("modal-decision").style.display = "flex";
+}
+
+// Aplica el resultado de la opción elegida al jugador y al resumen del turno
+function aplicarDecision(jugador, evento, indexOpcion) {
+  const resultado = evento.opciones[indexOpcion].resolver();
+  jugador.saldo += resultado.impacto;
+  // El evento del resumen pasa a mostrar el desenlace de la decisión
+  jugador._resumen.evento = { emoji: evento.emoji, titulo: evento.titulo, desc: resultado.texto };
+  jugador._resumen.impactoEvento = resultado.impacto;
+  jugador._resumen.saldoDespues = jugador.saldo;
+  return resultado;
+}
+
+function resolverDecision(indexOpcion) {
+  if (!decisionPendiente) return;
+  const { evento, jugador } = decisionPendiente;
+  aplicarDecision(jugador, evento, indexOpcion);
+  document.getElementById("modal-decision").style.display = "none";
+  decisionPendiente = null;
+  actualizarHUD();
+  mostrarResumenTurno(jugador);
+  if (online.activo) pushEstado();
 }
 
 // Impuesto del Responsable Inscripto: paga el tope del Monotributo + 30% del excedente sobre el límite.
