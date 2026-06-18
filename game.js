@@ -987,10 +987,6 @@ function procesarTurno(dado, auto) {
     interesPrestamos += interes;
     amortizacion += capital;
     p.principal -= capital;
-    // Línea revolvente del seguro: al devolver capital del rescate, se recupera la cobertura
-    if (p.tipo === "seguro" && j.seguro) {
-      j.seguro.cobertura = Math.min(j.seguro.coberturaTotal || j.seguro.cobertura, (j.seguro.cobertura || 0) + capital);
-    }
     // Si es un préstamo de otro jugador, el prestamista cobra la cuota
     if (p.tipo === "jugador" && p.acreedorId) {
       const acreedor = estado.jugadores.find(x => x.id === p.acreedorId);
@@ -1321,17 +1317,27 @@ function cerrarModalEvento() {
   verificarQuiebra(j);
 }
 
+// Cobertura DISPONIBLE = tope total − lo que todavía debés del rescate (capital).
+// Así, cuando terminás de pagar el capital, vuelve exacta al tope. El interés NO la afecta.
+function coberturaSeguroDisponible(j) {
+  if (!j.seguro) return 0;
+  const total = j.seguro.coberturaTotal || j.seguro.cobertura || 0;
+  const enUso = (j.prestamos || []).filter(p => p.tipo === "seguro").reduce((s, p) => s + p.principal, 0);
+  return Math.max(0, Math.round(total - enUso));
+}
+
 // Intenta rescatar al jugador con su seguro. Devuelve true si lo salvó.
 function intentarRescateSeguro(j) {
   if (!j.seguro || j.saldo >= 0) return false;
   const rojo = -j.saldo;
-  if (j.seguro.cobertura < rojo) {
-    alert(`⚠️ Tu ${j.seguro.nombre} cubre hasta ${fmt(j.seguro.cobertura)}, pero tu deuda es de ${fmt(rojo)}. El seguro no alcanza a salvarte.`);
+  const disponible = coberturaSeguroDisponible(j);
+  if (disponible < rojo) {
+    alert(`⚠️ Tu ${j.seguro.nombre} tiene ${fmt(disponible)} de cobertura disponible, pero tu deuda es de ${fmt(rojo)}. No alcanza a salvarte.`);
     return false;
   }
-  j.seguro.cobertura -= rojo; // se consume parte de la cobertura
   j.saldo = 0;
-  // Lo que cubrió se transforma en una deuda en cuotas con interés (la mecánica de préstamos)
+  // Lo que cubrió se transforma en una deuda en cuotas con interés. Esa deuda "ocupa" la cobertura;
+  // a medida que devolvés el capital, la cobertura disponible vuelve a subir hacia el tope.
   const cuotas = 12;
   j.prestamos.push({
     banco: `🛡️ ${j.seguro.nombre}`,
@@ -1340,7 +1346,7 @@ function intentarRescateSeguro(j) {
     tasaMensual: j.seguro.tasa,
     tipo: "seguro"
   });
-  alert(`🛡️ ¡SALVADO POR EL SEGURO!\n${j.seguro.nombre} cubrió ${fmt(rojo)}.\n\nLo devolvés en ${cuotas} cuotas al ${(j.seguro.tasa * 100).toFixed(1)}%/mes.\nCobertura restante: ${fmt(j.seguro.cobertura)}.`);
+  alert(`🛡️ ¡SALVADO POR EL SEGURO!\n${j.seguro.nombre} cubrió ${fmt(rojo)}.\n\nLo devolvés en ${cuotas} cuotas al ${(j.seguro.tasa * 100).toFixed(1)}%/mes (el interés se cobra aparte).\nCobertura disponible ahora: ${fmt(coberturaSeguroDisponible(j))}.`);
   actualizarHUD();
   if (online.activo) pushEstado();
   return true;
@@ -1990,9 +1996,6 @@ function abrirPrestamos() {
     if (j.saldo < pago) { alert(`No te alcanza para pagar el mes (${fmt(pago)} = ${fmt(interes)} interés + ${fmt(capital)} capital). Tenés ${fmt(j.saldo)}.`); return; }
     j.saldo -= pago;
     p.principal -= capital;
-    if (p.tipo === "seguro" && j.seguro) {
-      j.seguro.cobertura = Math.min(j.seguro.coberturaTotal || j.seguro.cobertura, (j.seguro.cobertura || 0) + capital);
-    }
     if (p.tipo === "jugador" && p.acreedorId) {
       const ac = estado.jugadores.find(x => x.id === p.acreedorId);
       if (ac) ac.saldo += pago;
@@ -2018,9 +2021,6 @@ function abrirPrestamos() {
     if (p.tipo === "jugador" && p.acreedorId) {
       const ac = estado.jugadores.find(x => x.id === p.acreedorId);
       if (ac) ac.saldo += p.principal;
-    }
-    if (p.tipo === "seguro" && j.seguro) {
-      j.seguro.cobertura = Math.min(j.seguro.coberturaTotal || j.seguro.cobertura, (j.seguro.cobertura || 0) + p.principal);
     }
     j.saldo -= p.principal;
     j.prestamos.splice(idx, 1);
@@ -2111,12 +2111,16 @@ function abrirSeguro() {
 
     if (j.seguro) {
       const s = j.seguro;
+      const disponible = coberturaSeguroDisponible(j);
+      const enUso = Math.max(0, (s.coberturaTotal || s.cobertura) - disponible);
       html += `<div style="background:#eaf7f0;border:2px solid var(--verde);border-radius:14px;padding:14px;margin-bottom:16px;">
         <div style="font-weight:800;color:var(--azul);font-size:15px;">${s.emoji} ${s.nombre} <span style="color:var(--verde);">· ACTIVO</span></div>
         <div style="font-size:13px;color:var(--gris-dark);margin-top:6px;line-height:1.6;">
           Prima: <strong>${fmt(s.prima)}/mes</strong><br>
-          Cobertura disponible: <strong>${fmt(s.cobertura)}</strong> de ${fmt(s.coberturaTotal)}<br>
-          Interés si usás la cobertura: <strong>${(s.tasa * 100).toFixed(1)}%/mes</strong>
+          Cobertura total: <strong>${fmt(s.coberturaTotal)}</strong><br>
+          ${enUso > 0 ? `En uso por rescate (se recupera al pagar el capital): <strong style="color:var(--naranja);">${fmt(enUso)}</strong><br>` : ""}
+          Disponible ahora: <strong style="color:var(--verde);">${fmt(disponible)}</strong><br>
+          Interés del rescate: <strong>${(s.tasa * 100).toFixed(1)}%/mes</strong> <span style="font-size:11px;">(se cobra aparte, no descuenta cobertura)</span>
         </div>
         <button class="btn btn-rojo btn-sm" style="margin-top:10px;" onclick="cancelarSeguro()">Cancelar seguro</button>
       </div>`;
