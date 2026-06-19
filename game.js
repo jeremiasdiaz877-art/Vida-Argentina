@@ -458,7 +458,9 @@ function crearJugadorBase(nombre, avatar) {
     seguro: null,
     gastoBase: 0,
     _estadoImpositivo: "Monotributo (Cat. A)", // arrancan como monotributistas
-    _saldoIvaAFavor: 0                          // sin saldo a favor de IVA al inicio
+    _saldoIvaAFavor: 0,                         // sin saldo a favor de IVA al inicio
+    // Acumuladores para el "briteo" final (cómo te hiciste rico)
+    _statSueldo: 0, _statEmpresas: 0, _statAlquileres: 0, _statEventos: 0, _statInversiones: 0
   };
 }
 
@@ -1042,6 +1044,11 @@ function procesarTurno(dado, auto) {
   const gastos = gastosFijos + cuotaTotal + costoCarrera + primaSeguro + pagoIva + pagoMonotributo;
   j.saldo += ingresado - gastos;
 
+  // "Briteo": acumular de dónde vino la plata (solo aportes positivos)
+  j._statSueldo = (j._statSueldo || 0) + ingresoSueldo;
+  j._statEmpresas = (j._statEmpresas || 0) + Math.max(0, retornoEmpresa);
+  j._statAlquileres = (j._statAlquileres || 0) + alquiler;
+
   // Acumular para la liquidación semestral
   j._acumIngresos = (j._acumIngresos || 0) + ingresoSueldo + retornoEmpresa + alquiler;
   // Deducciones permitidas: intereses de préstamos (NO el capital), cuota de carrera y 20% de gastos fijos
@@ -1083,6 +1090,7 @@ function procesarTurno(dado, auto) {
       eventoIvaAFavor = true;
     } else {
       j.saldo += impactoEvento;
+      if (impactoEvento > 0) j._statEventos = (j._statEventos || 0) + impactoEvento;
       // Si sufriste una retención, queda como saldo a cuenta del impuesto del semestre
       if (evento.titulo === "Retención impositiva") {
         j._acumRetenciones = (j._acumRetenciones || 0) + Math.abs(impactoEvento);
@@ -1181,6 +1189,7 @@ function mostrarModalDecision(evento, jugador) {
 function aplicarDecision(jugador, evento, indexOpcion) {
   const resultado = evento.opciones[indexOpcion].resolver();
   jugador.saldo += resultado.impacto;
+  if (resultado.impacto > 0) jugador._statEventos = (jugador._statEventos || 0) + resultado.impacto;
   // El evento del resumen pasa a mostrar el desenlace de la decisión
   jugador._resumen.evento = { emoji: evento.emoji, titulo: evento.titulo, desc: resultado.texto };
   jugador._resumen.impactoEvento = resultado.impacto;
@@ -1833,6 +1842,35 @@ async function doLogin() {
   }
 }
 
+// "Briteo": desglose visual de cómo el jugador hizo su plata (para compartir captura)
+function renderDesgloseIngresos(j) {
+  const cats = [
+    { label: "💵 Sueldo", val: j._statSueldo || 0, color: "#4a90d9" },
+    { label: "🏢 Empresas", val: j._statEmpresas || 0, color: "#00b894" },
+    { label: "🏠 Alquileres", val: j._statAlquileres || 0, color: "#f9ca24" },
+    { label: "📈 Inversiones", val: Math.max(0, j._statInversiones || 0), color: "#e17055" },
+    { label: "🎁 Eventos y decisiones", val: j._statEventos || 0, color: "#a29bfe" }
+  ].filter(c => c.val > 0).sort((a, b) => b.val - a.val);
+  const total = cats.reduce((s, c) => s + c.val, 0);
+  if (total <= 0) return "";
+  const filas = cats.map(c => {
+    const pct = Math.round(c.val / total * 100);
+    return `<div style="margin-bottom:8px;">
+      <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:3px;">
+        <span>${c.label}</span><span style="font-weight:700;">${fmt(c.val)} · ${pct}%</span>
+      </div>
+      <div style="background:var(--gris-med);border-radius:6px;height:10px;overflow:hidden;">
+        <div style="width:${pct}%;height:100%;background:${c.color};"></div>
+      </div>
+    </div>`;
+  }).join("");
+  return `<div style="background:#fff;border:1px solid var(--gris-med);border-radius:14px;padding:16px;margin-top:16px;box-shadow:0 4px 16px rgba(26,58,107,0.08);">
+    <div style="font-weight:800;color:var(--azul);font-size:14px;margin-bottom:12px;text-align:center;">💰 Cómo se hizo la plata</div>
+    ${filas}
+    <div style="font-size:11px;color:var(--gris-dark);text-align:center;margin-top:8px;">📸 Sacale captura y compartilo · Vida Argentina 🇦🇷</div>
+  </div>`;
+}
+
 function mostrarPantallaVictoria(ganador) {
   mostrarPantalla("pantalla-victoria");
   document.querySelector("#pantalla-victoria .victoria-emoji").textContent = "🏆";
@@ -1850,7 +1888,7 @@ function mostrarPantallaVictoria(ganador) {
       <span class="ranking-nombre">${j.avatar} ${j.nombre}</span>
       <span class="ranking-saldo">${fmt(calcularPatrimonio(j))}</span>
     </div>
-  `).join("");
+  `).join("") + renderDesgloseIngresos(ganador);
 }
 
 function reiniciarJuego() {
@@ -2420,6 +2458,7 @@ function abrirInversiones() {
     j.saldo += valor;
     // La ganancia (o pérdida) realizada entra en la base del impuesto semestral
     j._acumIngresos = (j._acumIngresos || 0) + pl;
+    j._statInversiones = (j._statInversiones || 0) + pl; // "briteo": resultado de trading
     j.acciones = j.acciones.filter(a => a.nombre !== inst.nombre);
     actualizarHUD();
     if (online.activo) pushEstado();
