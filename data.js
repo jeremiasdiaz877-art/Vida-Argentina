@@ -182,23 +182,35 @@ const EMPRESAS = [
   { nombre: "Empresa Agropecuaria", emoji: "🚜", precio: 80000000, retornoPorTurno: 6400000, descripcion: "Exportación pura. Rentabilidad: 8%/mes" }
 ];
 
+// Estrategia de gestión de cada empresa (la elige el jugador y la puede cambiar).
+// mult = cuánto rinde en un mes normal | pMal = prob. mal mes (pérdida) | pFlojo = prob. mes flojo (40%)
+// perdMin/perdRange = magnitud de la pérdida en un mal mes (× el retorno base)
+const MODOS_EMPRESA = {
+  estable:  { label: "Estable",  emoji: "🛡️", mult: 0.70, pMal: 0.00, pFlojo: 0.10, perdMin: 0,   perdRange: 0,   desc: "Rinde menos (70%) pero casi nunca falla. Seguro." },
+  normal:   { label: "Normal",   emoji: "⚖️", mult: 1.00, pMal: 0.08, pFlojo: 0.12, perdMin: 0.8, perdRange: 0.7, desc: "Equilibrado: rinde 100%, riesgo medio." },
+  agresiva: { label: "Agresiva", emoji: "🚀", mult: 1.60, pMal: 0.20, pFlojo: 0.10, perdMin: 1.0, perdRange: 1.0, desc: "Rinde 160% cuando va bien, pero más meses malos y pérdidas grandes." }
+};
+
 const PROPIEDADES = [
   { nombre: "Cochera céntrica", emoji: "🅿️", precio: 1500000, alquilerPorTurno: 30000, descripcion: "Poco mantenimiento" },
   { nombre: "Departamento 1 amb.", emoji: "🏠", precio: 4000000, alquilerPorTurno: 60000, descripcion: "Alquiler tradicional" },
   { nombre: "Local comercial", emoji: "🏪", precio: 8000000, alquilerPorTurno: 140000, descripcion: "Zona de alto tráfico" },
-  { nombre: "Lote en barrio privado", emoji: "🌳", precio: 15000000, alquilerPorTurno: 180000, descripcion: "Inversión a largo plazo" },
-  { nombre: "PH con jardín", emoji: "🏘️", precio: 25000000, alquilerPorTurno: 375000, descripcion: "Lujo accesible" },
-  { nombre: "Campo agrícola", emoji: "🌾", precio: 90000000, alquilerPorTurno: 1350000, descripcion: "Arrendamiento en dólares" },
-  { nombre: "Torre Premium", emoji: "🏙️", precio: 200000000, alquilerPorTurno: 3000000, descripcion: "Inversión gigante" }
+  { nombre: "Lote en barrio privado", emoji: "🌳", precio: 15000000, alquilerPorTurno: 180000, descripcion: "Inversión a largo plazo", premium: true },
+  { nombre: "PH con jardín", emoji: "🏘️", precio: 25000000, alquilerPorTurno: 375000, descripcion: "Lujo accesible", premium: true },
+  { nombre: "Campo agrícola", emoji: "🌾", precio: 90000000, alquilerPorTurno: 1350000, descripcion: "Arrendamiento en dólares", premium: true },
+  { nombre: "Torre Premium", emoji: "🏙️", precio: 200000000, alquilerPorTurno: 3000000, descripcion: "Inversión gigante", premium: true }
 ];
+
+// Victoria inmobiliaria: ser dueño de esta cantidad de propiedades PREMIUM (sin estar en quiebra)
+const META_PROPIEDADES_PREMIUM = 4;
 
 // Aseguradoras contra quiebra: pagás una prima mensual y, si quebrás SIN activos para vender,
 // la aseguradora cubre el rojo (hasta su cobertura total) y eso se vuelve una deuda con interés alto.
 // Más cobertura = prima mensual más cara.
 const ASEGURADORAS = [
-  { nombre: "Seguro Básico", emoji: "🛡️", cobertura: 2000000, prima: 45000, tasa: 0.050, descripcion: "Cubre hasta $2M. Rescate al 5%/mes." },
-  { nombre: "Seguro Premium", emoji: "🏰", cobertura: 5000000, prima: 90000, tasa: 0.040, descripcion: "Cubre hasta $5M. Rescate al 4%/mes." },
-  { nombre: "Seguro Elite", emoji: "💎", cobertura: 10000000, prima: 170000, tasa: 0.030, descripcion: "Cubre hasta $10M. Rescate al 3%/mes." }
+  { nombre: "Seguro Básico", emoji: "🛡️", cobertura: 2000000, prima: 45000, tasa: 0.20, descripcion: "Cubre hasta $2M. Si lo usás, devolvés con 20%/mes de interés." },
+  { nombre: "Seguro Premium", emoji: "🏰", cobertura: 5000000, prima: 90000, tasa: 0.20, descripcion: "Cubre hasta $5M. Si lo usás, devolvés con 20%/mes de interés." },
+  { nombre: "Seguro Elite", emoji: "💎", cobertura: 10000000, prima: 170000, tasa: 0.20, descripcion: "Cubre hasta $10M. Si lo usás, devolvés con 20%/mes de interés." }
 ];
 
 // Cada banco tiene su propia tasa mensual, monto máximo, plazos y beneficio

@@ -956,20 +956,22 @@ function procesarTurno(dado, auto) {
   let retornoEmpresa = 0;
   let empresasRiesgo = []; // avisos de empresas con problemas este mes
   j.empresas.forEach(e => {
+    const modo = MODOS_EMPRESA[e.modo] || MODOS_EMPRESA.normal; // estrategia elegida por el jugador
+    const base = e.retornoPorTurno;
     const suerte = Math.random();
-    if (suerte < 0.04) {
-      // Mal mes (4%): en vez de ganar, la empresa genera pérdida (entre 0.8x y 1.5x el retorno)
-      const perdida = Math.round(e.retornoPorTurno * (0.8 + Math.random() * 0.7));
+    if (suerte < modo.pMal) {
+      // Mal mes: en vez de ganar, la empresa genera pérdida
+      const perdida = Math.round(base * (modo.perdMin + Math.random() * modo.perdRange));
       retornoEmpresa -= perdida;
       empresasRiesgo.push({ nombre: e.nombre, emoji: e.emoji, tipo: "perdida", monto: -perdida });
-    } else if (suerte < 0.12) {
-      // Mes flojo (8%): rinde solo el 40%
-      const flojo = Math.round(e.retornoPorTurno * 0.4);
+    } else if (suerte < modo.pMal + modo.pFlojo) {
+      // Mes flojo: rinde solo el 40% del base
+      const flojo = Math.round(base * 0.4);
       retornoEmpresa += flojo;
       empresasRiesgo.push({ nombre: e.nombre, emoji: e.emoji, tipo: "flojo", monto: flojo });
     } else {
-      // Mes normal (88%)
-      retornoEmpresa += e.retornoPorTurno;
+      // Mes normal/bueno: rinde el base ajustado por la estrategia
+      retornoEmpresa += Math.round(base * modo.mult);
     }
   });
 
@@ -981,13 +983,19 @@ function procesarTurno(dado, auto) {
   const gastosFijos = Math.round(ingresoSueldo * 0.6);
 
   // 5) Préstamos: Sistema Alemán — capital fijo + interés sobre el saldo deudor (baja mes a mes)
-  let interesPrestamos = 0;
-  let amortizacion = 0;
+  // La deuda del seguro (rescate) se contabiliza aparte para mostrarla separada en el resumen.
+  let interesPrestamos = 0, amortizacion = 0;
+  let interesSeguro = 0, amortizacionSeguro = 0;
   j.prestamos.forEach(p => {
     const interes = Math.round(p.principal * p.tasaMensual);
     const capital = Math.min(p.cuotaPrincipal, p.principal);
-    interesPrestamos += interes;
-    amortizacion += capital;
+    if (p.tipo === "seguro") {
+      interesSeguro += interes;
+      amortizacionSeguro += capital;
+    } else {
+      interesPrestamos += interes;
+      amortizacion += capital;
+    }
     p.principal -= capital;
     // Si es un préstamo de otro jugador, el prestamista cobra la cuota
     if (p.tipo === "jugador" && p.acreedorId) {
@@ -996,7 +1004,7 @@ function procesarTurno(dado, auto) {
     }
   });
   j.prestamos = j.prestamos.filter(p => p.principal > 0.5);
-  const cuotaTotal = interesPrestamos + amortizacion;
+  const cuotaTotal = interesPrestamos + amortizacion + interesSeguro + amortizacionSeguro;
 
   // 6) Costo de carrera mientras estudia
   const costoCarrera = (j.enCarrera && j.carrera.costo > 0) ? j.carrera.costo : 0;
@@ -1053,7 +1061,7 @@ function procesarTurno(dado, auto) {
   j._acumIngresos = (j._acumIngresos || 0) + ingresoSueldo + retornoEmpresa + alquiler;
   // Deducciones permitidas: intereses de préstamos (NO el capital), cuota de carrera y 20% de gastos fijos
   // (simulando deducciones de la actividad: home office, ropa de trabajo, etc.)
-  j._acumDeducciones = (j._acumDeducciones || 0) + interesPrestamos + costoCarrera + Math.round(gastosFijos * 0.20);
+  j._acumDeducciones = (j._acumDeducciones || 0) + interesPrestamos + interesSeguro + costoCarrera + Math.round(gastosFijos * 0.20);
 
   // El dado decide la suerte: bajo = malo, medio = neutro/chico, alto = bueno
   // Los eventos reciben (saldo, patrimonio): los gastos grandes usan el patrimonio
@@ -1137,7 +1145,7 @@ function procesarTurno(dado, auto) {
   // Guardar el resumen del turno para mostrarlo
   j._resumen = {
     saldoAntes, ingresoSueldo, retornoEmpresa, alquiler, empresasRiesgo,
-    gastosFijos, interesPrestamos, amortizacion, costoCarrera, primaSeguro,
+    gastosFijos, interesPrestamos, amortizacion, interesSeguro, amortizacionSeguro, costoCarrera, primaSeguro,
     pagoIva, ivaUsadoAFavor, saldoIva: j._saldoIvaAFavor, pagoMonotributo, eventoIvaAFavor,
     evento, impactoEvento, impuesto, baseImpuesto, estadoImpositivo: j._estadoImpositivo, saldoDespues: j.saldo
   };
@@ -1298,8 +1306,10 @@ function mostrarResumenTurno(j) {
       ${r.retornoEmpresa !== 0 ? linea("🏢 Empresas", Math.abs(r.retornoEmpresa), r.retornoEmpresa < 0) : ""}
       ${linea("🏠 Alquileres", r.alquiler, false)}
       ${linea("🏠 Gastos fijos", r.gastosFijos, true)}
-      ${linea("🏦 Interés préstamos (1.5%)", r.interesPrestamos, true)}
+      ${linea("🏦 Interés préstamos", r.interesPrestamos, true)}
       ${linea("🏦 Amortización préstamos", r.amortizacion, true)}
+      ${linea("🛡️ Interés del rescate", r.interesSeguro, true)}
+      ${linea("🛡️ Devolución del rescate", r.amortizacionSeguro, true)}
       ${linea("🎓 Cuota de carrera", r.costoCarrera, true)}
       ${linea("🛡️ Prima del seguro", r.primaSeguro, true)}
       ${r.pagoMonotributo > 0 ? linea("📝 Cuota de Monotributo", r.pagoMonotributo, true) : ""}
@@ -1415,7 +1425,8 @@ function mostrarQuiebra(j) {
     `).join("");
   }
 
-  html += `<button class="btn btn-primary" onclick="continuarDespuesQuiebra()" style="margin-top:16px;">Continuar sin vender</button>`;
+  // Podés vender activos O usar el seguro (que te cubre pero después lo devolvés con 20%/mes de interés).
+  html += `<button class="btn btn-primary" onclick="continuarDespuesQuiebra()" style="margin-top:16px;">Continuar sin vender${j.seguro ? " (usar seguro)" : ""}</button>`;
   contenido.innerHTML = html;
   document.getElementById("modal-quiebra").style.display = "flex";
 }
@@ -1478,6 +1489,15 @@ function continuarDespuesQuiebra() {
 function verificarVictoria(j) {
   const patrimonio = calcularPatrimonio(j);
   if (patrimonio >= META_VICTORIA) {
+    estado._tipoVictoria = "financiero";
+    finalizarPartida("victoria", j);
+    return;
+  }
+
+  // Final Inmobiliario: tener X propiedades premium sin estar en quiebra
+  const premiumCount = j.propiedades.filter(p => p.premium).length;
+  if (premiumCount >= META_PROPIEDADES_PREMIUM && j.saldo >= 0 && !j.eliminado) {
+    estado._tipoVictoria = "inmobiliario";
     finalizarPartida("victoria", j);
     return;
   }
@@ -1492,6 +1512,7 @@ function verificarVictoria(j) {
 
   // En multijugador, gana el último que queda en pie
   if (estado.jugadores.length > 1 && vivos.length === 1) {
+    estado._tipoVictoria = "ultimo";
     finalizarPartida("victoria", vivos[0]);
     return;
   }
@@ -1873,10 +1894,18 @@ function renderDesgloseIngresos(j) {
 
 function mostrarPantallaVictoria(ganador) {
   mostrarPantalla("pantalla-victoria");
-  document.querySelector("#pantalla-victoria .victoria-emoji").textContent = "🏆";
-  document.querySelector("#pantalla-victoria .victoria-titulo").textContent = "¡GANASTE!";
+  // Título y emoji según CÓMO ganó
+  const tipos = {
+    inmobiliario: { emoji: "🏙️", titulo: "¡MAGNATE INMOBILIARIO!", sub: `Reuniste ${META_PROPIEDADES_PREMIUM} propiedades premium` },
+    financiero:   { emoji: "🏆", titulo: "¡GANASTE!", sub: `Llegaste a la meta de ${fmt(META_VICTORIA)}` },
+    tiempo:       { emoji: "🏆", titulo: "¡GANASTE!", sub: "El mayor patrimonio al cumplirse el tiempo" },
+    ultimo:       { emoji: "🏆", titulo: "¡GANASTE!", sub: "Último en pie, el resto quebró" }
+  };
+  const t = tipos[estado._tipoVictoria] || tipos.tiempo;
+  document.querySelector("#pantalla-victoria .victoria-emoji").textContent = t.emoji;
+  document.querySelector("#pantalla-victoria .victoria-titulo").textContent = t.titulo;
   document.getElementById("victoria-nombre").textContent = `${ganador.avatar} ${ganador.nombre}`;
-  document.getElementById("victoria-saldo").textContent = `Patrimonio: ${fmt(calcularPatrimonio(ganador))}`;
+  document.getElementById("victoria-saldo").innerHTML = `<div>${t.sub}</div><div style="margin-top:4px;">Patrimonio: ${fmt(calcularPatrimonio(ganador))}</div>`;
 
   const ranking = [...estado.jugadores].sort((a, b) => calcularPatrimonio(b) - calcularPatrimonio(a));
   const posEmojis = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣", "6️⃣", "7️⃣"];
@@ -2476,6 +2505,24 @@ function abrirEmpresas() {
     const j = estado.jugadores[estado.jugadorActual];
     let html = `<div style="font-size:13px;color:var(--azul);font-weight:700;margin-bottom:4px;">💵 Saldo: ${fmt(j.saldo)}</div>
       <p style="font-size:13px;color:var(--gris-dark);margin-bottom:12px;">Comprá empresas que generan ingresos cada turno. Podés tener varias.</p>`;
+
+    // ===== Tus empresas: elegí la estrategia de gestión de cada una =====
+    if (j.empresas.length > 0) {
+      html += `<div style="background:var(--gris);border-radius:12px;padding:12px;margin-bottom:16px;">
+        <p style="font-weight:700;font-size:13px;color:var(--azul);margin-bottom:2px;">🏢 Tus empresas — Estrategia</p>
+        <p style="font-size:11px;color:var(--gris-dark);margin-bottom:10px;">🛡️ Estable: seguro, rinde menos · ⚖️ Normal: equilibrado · 🚀 Agresiva: rinde más pero más riesgo</p>`;
+      j.empresas.forEach((em, idx) => {
+        const mActual = em.modo || "normal";
+        html += `<div style="background:#fff;border-radius:10px;padding:8px 10px;margin-bottom:8px;">
+          <div style="font-size:13px;font-weight:600;color:var(--azul);margin-bottom:6px;">${em.emoji} ${em.nombre} <span style="color:var(--gris-dark);font-weight:500;">(+${fmt(em.retornoPorTurno)}/turno base)</span></div>
+          <div style="display:flex;gap:6px;">
+            ${["estable", "normal", "agresiva"].map(mk => `<button class="btn ${mActual === mk ? "btn-primary" : "btn-secondary"} btn-sm" style="flex:1;padding:6px 4px;font-size:12px;" onclick="setModoEmpresa(${idx},'${mk}')">${MODOS_EMPRESA[mk].emoji} ${MODOS_EMPRESA[mk].label}</button>`).join("")}
+          </div>
+        </div>`;
+      });
+      html += `</div>`;
+    }
+
     EMPRESAS.forEach((e, i) => {
       const cant = j.empresas.filter(em => em.nombre === e.nombre).length;
       html += `<div class="mercado-item">
@@ -2495,12 +2542,20 @@ function abrirEmpresas() {
     document.getElementById("empresas-contenido").innerHTML = html;
   }
 
+  window.setModoEmpresa = (idx, modo) => {
+    const j = estado.jugadores[estado.jugadorActual];
+    if (!j.empresas[idx] || !MODOS_EMPRESA[modo]) return;
+    j.empresas[idx].modo = modo;
+    if (online.activo) pushEstado();
+    render();
+  };
+
   window.comprarEmpresa = (idx) => {
     const j = estado.jugadores[estado.jugadorActual];
     const empresa = EMPRESAS[idx];
     if (j.saldo < empresa.precio) { alert(`No tenés saldo suficiente. Necesitás ${fmt(empresa.precio)}`); return; }
     j.saldo -= empresa.precio;
-    j.empresas.push({ ...empresa });
+    j.empresas.push({ ...empresa, modo: "normal" });
     actualizarHUD();
     if (online.activo) pushEstado();
     render();
@@ -2527,13 +2582,15 @@ function abrirPropiedades() {
   if (!esMiTurno()) { alert("Esperá tu turno para operar."); return; }
   function render() {
     const j = estado.jugadores[estado.jugadorActual];
+    const premiumActuales = j.propiedades.filter(pr => pr.premium).length;
     let html = `<div style="font-size:13px;color:var(--azul);font-weight:700;margin-bottom:4px;">💵 Saldo: ${fmt(j.saldo)}</div>
-      <p style="font-size:13px;color:var(--gris-dark);margin-bottom:12px;">Comprá propiedades que generan alquiler cada turno. Podés tener varias.</p>`;
+      <p style="font-size:13px;color:var(--gris-dark);margin-bottom:10px;">Comprá propiedades que generan alquiler cada turno. Podés tener varias.</p>
+      <div style="background:#eef6ff;border:1px solid var(--celeste);border-radius:10px;padding:10px;margin-bottom:12px;font-size:12px;color:var(--azul);">🏙️ <strong>Final Inmobiliario:</strong> juntá ${META_PROPIEDADES_PREMIUM} propiedades premium (⭐) sin estar en quiebra y <strong>ganás la partida</strong>. Vas <strong>${premiumActuales}/${META_PROPIEDADES_PREMIUM}</strong>.</div>`;
     PROPIEDADES.forEach((p, i) => {
       const cant = j.propiedades.filter(pr => pr.nombre === p.nombre).length;
       html += `<div class="mercado-item">
         <div>
-          <div class="mercado-nombre">${p.emoji} ${p.nombre}</div>
+          <div class="mercado-nombre">${p.emoji} ${p.nombre}${p.premium ? ' <span style="color:var(--amarillo-dark);font-size:11px;">⭐ PREMIUM</span>' : ''}</div>
           <div class="mercado-retorno">+${fmt(p.alquilerPorTurno)}/turno alquiler</div>
           <div style="font-size:12px;color:var(--gris-dark);">${p.descripcion}</div>
           ${cant > 0 ? `<div style="font-size:12px;color:var(--azul);font-weight:600;">✅ Tenés ${cant}</div>` : ""}
@@ -2557,6 +2614,11 @@ function abrirPropiedades() {
     actualizarHUD();
     if (online.activo) pushEstado();
     render();
+    // ¿Alcanzaste el Final Inmobiliario al comprar esta?
+    if (j.propiedades.filter(p => p.premium).length >= META_PROPIEDADES_PREMIUM && j.saldo >= 0) {
+      cerrarModal("modal-propiedades");
+      verificarVictoria(j);
+    }
   };
 
   window.venderPropiedadMercado = (idx) => {
@@ -2695,7 +2757,7 @@ function verFinanzas(idx) {
     const empPos = (r.retornoEmpresa || 0) > 0 ? r.retornoEmpresa : 0;
     const empNeg = (r.retornoEmpresa || 0) < 0 ? -r.retornoEmpresa : 0;
     const totalIng = (r.ingresoSueldo || 0) + empPos + (r.alquiler || 0) + evPos;
-    const totalEgr = (r.gastosFijos || 0) + (r.interesPrestamos || 0) + (r.amortizacion || 0) + (r.costoCarrera || 0) + (r.impuesto || 0) + evNeg + empNeg + (r.primaSeguro || 0) + (r.pagoIva || 0) + (r.pagoMonotributo || 0);
+    const totalEgr = (r.gastosFijos || 0) + (r.interesPrestamos || 0) + (r.amortizacion || 0) + (r.interesSeguro || 0) + (r.amortizacionSeguro || 0) + (r.costoCarrera || 0) + (r.impuesto || 0) + evNeg + empNeg + (r.primaSeguro || 0) + (r.pagoIva || 0) + (r.pagoMonotributo || 0);
     const resultado = totalIng - totalEgr;
     html += `<div class="estado-box">
       <div class="estado-titulo">📈 Estado de Resultados — ${fechaJugador(j)}</div>
@@ -2711,6 +2773,8 @@ function verFinanzas(idx) {
         ${empNeg ? fila("🏢 Pérdida de empresas", empNeg, "var(--rojo)") : ""}
         ${r.interesPrestamos ? fila("🏦 Interés de préstamos", r.interesPrestamos, "var(--rojo)") : ""}
         ${r.amortizacion ? fila("🏦 Amortización", r.amortizacion, "var(--rojo)") : ""}
+        ${r.interesSeguro ? fila("🛡️ Interés del rescate", r.interesSeguro, "var(--rojo)") : ""}
+        ${r.amortizacionSeguro ? fila("🛡️ Devolución del rescate", r.amortizacionSeguro, "var(--rojo)") : ""}
         ${r.costoCarrera ? fila("🎓 Cuota de carrera", r.costoCarrera, "var(--rojo)") : ""}
         ${r.primaSeguro ? fila("🛡️ Prima del seguro", r.primaSeguro, "var(--rojo)") : ""}
         ${r.pagoMonotributo ? fila("📝 Cuota de Monotributo", r.pagoMonotributo, "var(--rojo)") : ""}
@@ -2769,5 +2833,6 @@ function finalizarPorTiempo() {
   const ganador = vivos.reduce((prev, current) => (calcularPatrimonio(prev) > calcularPatrimonio(current)) ? prev : current);
   
   alert("⏱️ ¡TIEMPO AGOTADO!\nSe cumplieron los 35 minutos de partida.\nEl ganador se define por quién tiene el mayor patrimonio total (Caja + Activos).");
+  estado._tipoVictoria = "tiempo";
   finalizarPartida("victoria", ganador);
 }
