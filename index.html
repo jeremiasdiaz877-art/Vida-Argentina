@@ -38,6 +38,7 @@
     <button class="btn btn-primary" onclick="irAJugadores()">👥 Jugar Local — Gratis</button>
     <button class="btn btn-secondary" onclick="irASala()">🌐 Crear / Unirse a Sala</button>
     <button class="btn btn-secondary" onclick="abrirRanking()">🏆 Salón de la Fama</button>
+    <button class="btn btn-secondary" onclick="abrirLogros()">🏅 Mis Logros</button>
     <div class="ranking-promo-card" onclick="abrirAuth()" id="promo-registro">
       <div class="promo-icon">🏆</div>
       <div class="promo-text">
@@ -166,10 +167,10 @@
         <div id="turno-timer" style="font-size:18px;font-weight:600;color:var(--azul);margin-top:6px;">⏱ 1:30</div>
       </div>
       <div class="dado-container">
-        <div class="dado" id="dado-display" onclick="tirarDado()">⚀</div>
+        <div class="dado" id="dado-display" onclick="tirarDado()"><span class="carta-icono">🃏</span><span>CARTA<br>DEL MES</span></div>
         <div id="dado-resultado" style="min-height:46px;margin-top:6px;text-align:center;"></div>
       </div>
-      <button class="btn btn-primary" id="btn-tirar" onclick="tirarDado()" style="max-width:280px;">🎲 Tirar Dado</button>
+      <button class="btn btn-primary" id="btn-tirar" onclick="tirarDado()" style="max-width:280px;">🃏 Levantar carta del mes</button>
       <button class="btn btn-secondary" id="btn-siguiente" onclick="siguienteTurno()" style="max-width:280px;display:none;">Siguiente turno →</button>
       <div id="aviso-turno" style="display:none;background:#fff3cd;border:1px solid #ffc107;border-radius:12px;padding:14px;margin-top:12px;max-width:280px;text-align:center;color:var(--azul);"></div>
     </div>
@@ -229,6 +230,15 @@
     <div class="modal-titulo">🏆 Salón de la Fama</div>
     <div id="ranking-contenido"></div>
     <button class="btn" style="background:var(--gris);color:var(--gris-dark);margin-top:8px;" onclick="borrarRanking()">🗑️ Borrar historial</button>
+  </div>
+</div>
+
+<!-- Modal Mis Logros (insignias) -->
+<div id="modal-logros" class="modal-overlay" style="display:none;" onclick="cerrarModal('modal-logros')">
+  <div class="modal" onclick="event.stopPropagation()">
+    <button class="modal-close" onclick="cerrarModal('modal-logros')">×</button>
+    <div class="modal-titulo">🏅 Mis Logros</div>
+    <div id="logros-contenido"></div>
   </div>
 </div>
 

@@ -820,7 +820,7 @@ function actualizarTurno() {
   document.getElementById("turno-info-sub").textContent = `📅 ${fechaJugador(j)} • Edad: ${j.edad} años`;
   document.getElementById("btn-tirar").style.display = "flex";
   document.getElementById("btn-siguiente").style.display = "none";
-  document.getElementById("dado-display").textContent = "⚀";
+  document.getElementById("dado-display").innerHTML = CARTA_DORSO;
   const resEl = document.getElementById("dado-resultado");
   if (resEl) resEl.innerHTML = "";
   actualizarMercadoPanel();
@@ -888,9 +888,8 @@ function turnoAgotado() {
     return;
   }
   if (!turnoTirado) {
-    // No tiró: se le tira automáticamente para que no pierda sus ingresos, y pasa
+    // No levantó la carta: se levanta sola para que no pierda sus ingresos, y pasa
     const dado = Math.floor(Math.random() * 6) + 1;
-    document.getElementById("dado-display").textContent = CARAS_DADO[dado - 1];
     procesarTurno(dado, true);
   } else {
     siguienteTurno();
@@ -898,37 +897,26 @@ function turnoAgotado() {
 }
 
 let tirando = false;
+// Contenido del dorso de la carta del mes
+const CARTA_DORSO = '<span class="carta-icono">🃏</span><span>CARTA<br>DEL MES</span>';
+
 function tirarDado() {
   if (!esMiTurno() || tirando) return; // online: solo actúa el jugador del turno
   tirando = true;
-  const dado = document.getElementById("dado-display");
+  const carta = document.getElementById("dado-display");
   const res = document.getElementById("dado-resultado");
   document.getElementById("btn-tirar").style.display = "none";
-  if (res) res.innerHTML = "";
+  if (res) res.innerHTML = `<div style="font-size:14px;color:var(--gris-dark);">Levantando la carta del mes...</div>`;
 
+  // El número (1-6) sigue existiendo por dentro para la suerte, pero NO se muestra: la carta es la sorpresa
   const resultado = Math.floor(Math.random() * 6) + 1;
-  dado.classList.add("girando");
-
-  // El dado "rueda" cambiando de cara ~1 segundo
-  let ticks = 0;
-  const giro = setInterval(() => {
-    dado.textContent = CARAS_DADO[Math.floor(Math.random() * 6)];
-    if (++ticks >= 12) {
-      clearInterval(giro);
-      dado.classList.remove("girando");
-      dado.textContent = CARAS_DADO[resultado - 1];
-      dado.classList.add("cayo");
-      setTimeout(() => dado.classList.remove("cayo"), 400);
-
-      // Mostrar solo el número que salió
-      if (res) {
-        res.innerHTML = `<div style="font-size:20px;font-weight:800;color:var(--azul);">Sacaste un ${resultado}</div>`;
-      }
-
-      // Recién ahí (tras leer el número) aparece el evento
-      setTimeout(() => { tirando = false; procesarTurno(resultado); }, 1100);
-    }
-  }, 85);
+  carta.classList.add("flip");
+  setTimeout(() => {
+    carta.classList.remove("flip");
+    if (res) res.innerHTML = "";
+    tirando = false;
+    procesarTurno(resultado);
+  }, 800);
 }
 
 function procesarTurno(dado, auto) {
@@ -989,7 +977,10 @@ function procesarTurno(dado, auto) {
   let interesSeguro = 0, amortizacionSeguro = 0;
   j.prestamos.forEach(p => {
     const interes = Math.round(p.principal * p.tasaMensual);
-    const capital = Math.min(p.cuotaPrincipal, p.principal);
+    // Francés: la cuota total es fija, el capital = cuota − interés (crece cada mes). Alemán: capital fijo.
+    const capital = (p.sistema === "frances")
+      ? Math.min(Math.max(0, Math.round(p.cuotaFija - interes)), p.principal)
+      : Math.min(p.cuotaPrincipal, p.principal);
     if (p.tipo === "seguro") {
       interesSeguro += interes;
       amortizacionSeguro += capital;
@@ -1084,12 +1075,13 @@ function procesarTurno(dado, auto) {
     // 3-4: neutro o pequeña oportunidad (50%)
     if (Math.random() < 0.5) {
       evento = positivos[Math.floor(Math.random() * positivos.length)];
-      impactoEvento = Math.round(evento.impacto(j.saldo, patri) * 0.4 * BOOST_POSITIVOS); // oportunidad chica (+20%)
+      // Math.max(0,...): un evento positivo nunca puede restar (pasaba con los % cuando el saldo estaba en rojo)
+      impactoEvento = Math.max(0, Math.round(evento.impacto(j.saldo, patri) * 0.4 * BOOST_POSITIVOS)); // oportunidad chica (+20%)
     }
   } else {
     // 5-6: evento positivo (pleno, con el +10% de beneficios y +20% de refuerzo)
     evento = positivos[Math.floor(Math.random() * positivos.length)];
-    impactoEvento = Math.round(evento.impacto(j.saldo, patri) * BONUS_BENEFICIOS * BOOST_POSITIVOS);
+    impactoEvento = Math.max(0, Math.round(evento.impacto(j.saldo, patri) * BONUS_BENEFICIOS * BOOST_POSITIVOS));
   }
   let eventoIvaAFavor = false;
   if (evento && !esEventoDecision) {
@@ -1914,9 +1906,66 @@ function chequearLogros(j) {
   LOGROS.forEach(l => {
     if (!j._logros.includes(l.id) && l.check(j)) {
       j._logros.push(l.id);
+      guardarLogroCuenta(l.id); // queda en tu perfil (persistente entre partidas)
       mostrarLogro(l);
     }
   });
+}
+
+// Perfil de logros por cuenta (persistente en este dispositivo). Clave = usuario logueado.
+function claveLogrosCuenta() {
+  const s = getSesion();
+  if (!s) return null;
+  return "vida_logros_" + (s.usuario || s.nombre || "").toLowerCase().trim();
+}
+function getLogrosCuenta() {
+  const k = claveLogrosCuenta();
+  if (!k) return [];
+  try { return JSON.parse(localStorage.getItem(k) || "[]"); } catch (e) { return []; }
+}
+function guardarLogroCuenta(id) {
+  const k = claveLogrosCuenta();
+  if (!k) return; // invitado: no hay perfil persistente
+  try {
+    const set = new Set(getLogrosCuenta());
+    set.add(id);
+    localStorage.setItem(k, JSON.stringify([...set]));
+  } catch (e) {}
+}
+
+// Modal "Mis Logros": grilla de insignias; tocar una muestra su nombre y descripción
+function abrirLogros() {
+  const s = getSesion();
+  // Logros a mostrar como desbloqueados: los de la cuenta (si está logueado) + los de la partida en curso
+  const desbloqueados = new Set(getLogrosCuenta());
+  const jActual = (estado.jugadores && estado.jugadores[estado.jugadorActual]) || null;
+  if (jActual && jActual._logros) jActual._logros.forEach(id => desbloqueados.add(id));
+
+  const total = LOGROS.length;
+  const conseguidos = LOGROS.filter(l => desbloqueados.has(l.id)).length;
+
+  let html = `<div style="text-align:center;font-size:13px;color:var(--gris-dark);margin-bottom:4px;">${s ? "👤 " + s.nombre : "Jugás como invitado (los logros no se guardan en tu perfil)"}</div>
+    <div style="text-align:center;font-weight:800;color:var(--azul);margin-bottom:14px;">${conseguidos}/${total} insignias</div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;">`;
+  LOGROS.forEach(l => {
+    const ok = desbloqueados.has(l.id);
+    html += `<div onclick="verLogro('${l.id}')" style="cursor:pointer;text-align:center;background:${ok ? "linear-gradient(135deg,#fde47f,#f9ca24)" : "var(--gris)"};border:2px solid ${ok ? "#fff" : "var(--gris-med)"};border-radius:14px;padding:12px 6px;${ok ? "box-shadow:0 4px 12px rgba(212,160,23,0.3);" : "opacity:0.55;"}">
+      <div style="font-size:30px;${ok ? "" : "filter:grayscale(1);"}">${ok ? l.emoji : "🔒"}</div>
+      <div style="font-size:10px;font-weight:700;color:var(--azul);margin-top:4px;line-height:1.2;">${l.titulo}</div>
+    </div>`;
+  });
+  html += `</div>
+    <div id="logro-detalle" style="margin-top:14px;background:var(--gris);border-radius:12px;padding:12px;font-size:13px;color:var(--gris-dark);text-align:center;min-height:20px;">Tocá una insignia para ver de qué se trata.</div>`;
+
+  window.verLogro = (id) => {
+    const l = LOGROS.find(x => x.id === id);
+    if (!l) return;
+    const ok = desbloqueados.has(l.id);
+    document.getElementById("logro-detalle").innerHTML = `<strong style="color:var(--azul);">${ok ? l.emoji : "🔒"} ${l.titulo}</strong><br>${l.desc}${ok ? "" : ` <span style="color:var(--rojo);">(bloqueado)</span>`}`;
+  };
+
+  document.getElementById("logros-contenido").innerHTML = html;
+  document.getElementById("modal-logros").style.display = "flex";
 }
 
 let _logroCola = [], _logroMostrando = false;
@@ -2066,23 +2115,39 @@ function abrirPrestamos() {
 
     const monto = montoSeleccionado;
     const tasaMensual = banco.tasa;
-    const cuotaPrincipal = Math.round(monto / cuotasSeleccionadas);
-    const interesInicial = Math.round(monto * tasaMensual);
-    const primeraCuota = cuotaPrincipal + interesInicial;
-    // Sistema Alemán: el interés total ≈ suma aritmética (la cuota baja mes a mes)
-    const interesTotal = Math.round(interesInicial * (cuotasSeleccionadas + 1) / 2);
+    const i = tasaMensual, n = cuotasSeleccionadas;
 
-    cont.innerHTML = `
-      <div class="prestamo-resumen">
-        <strong>Resumen del préstamo (${banco.nombre}) — Sistema Alemán:</strong><br>
-        Monto: ${fmt(monto)} en ${cuotasSeleccionadas} meses<br>
-        Cuota de capital (fija): ${fmt(cuotaPrincipal)}<br>
-        Interés inicial (${(tasaMensual * 100).toFixed(1)}% sobre saldo): ${fmt(interesInicial)}<br>
-        <strong>Primera cuota: ${fmt(primeraCuota)}</strong><br>
-        <span style="font-size:12px;color:var(--gris-dark);">💡 La cuota baja mes a mes. Interés total est.: ${fmt(interesTotal)}</span>
-      </div>
-    `;
-    window._prestamoPendiente = { banco: banco.nombre, monto, cuotas: cuotasSeleccionadas, principal: monto, cuotaPrincipal, tasaMensual, tipo: "banco" };
+    if (banco.sistema === "frances") {
+      // Sistema Francés: la CUOTA TOTAL es fija todos los meses
+      const cuotaFija = i > 0 ? Math.round(monto * (i * Math.pow(1 + i, n)) / (Math.pow(1 + i, n) - 1)) : Math.round(monto / n);
+      const interesTotal = Math.max(0, cuotaFija * n - monto);
+      cont.innerHTML = `
+        <div class="prestamo-resumen">
+          <strong>Resumen del préstamo (${banco.nombre}) — Sistema Francés:</strong><br>
+          Monto: ${fmt(monto)} en ${n} meses<br>
+          <strong>Cuota fija: ${fmt(cuotaFija)}/mes</strong> (siempre la misma)<br>
+          <span style="font-size:12px;color:var(--gris-dark);">💡 Pagás lo mismo todos los meses. Interés total: ${fmt(interesTotal)}</span>
+        </div>
+      `;
+      window._prestamoPendiente = { banco: banco.nombre, monto, cuotas: n, principal: monto, cuotaFija, tasaMensual, sistema: "frances", tipo: "banco" };
+    } else {
+      // Sistema Alemán: capital fijo + interés sobre el saldo (la cuota baja mes a mes)
+      const cuotaPrincipal = Math.round(monto / n);
+      const interesInicial = Math.round(monto * tasaMensual);
+      const primeraCuota = cuotaPrincipal + interesInicial;
+      const interesTotal = Math.round(interesInicial * (n + 1) / 2);
+      cont.innerHTML = `
+        <div class="prestamo-resumen">
+          <strong>Resumen del préstamo (${banco.nombre}) — Sistema Alemán:</strong><br>
+          Monto: ${fmt(monto)} en ${n} meses<br>
+          Cuota de capital (fija): ${fmt(cuotaPrincipal)}<br>
+          Interés inicial (${(tasaMensual * 100).toFixed(1)}% sobre saldo): ${fmt(interesInicial)}<br>
+          <strong>Primera cuota: ${fmt(primeraCuota)}</strong><br>
+          <span style="font-size:12px;color:var(--gris-dark);">💡 La cuota baja mes a mes. Interés total est.: ${fmt(interesTotal)}</span>
+        </div>
+      `;
+      window._prestamoPendiente = { banco: banco.nombre, monto, cuotas: n, principal: monto, cuotaPrincipal, tasaMensual, sistema: "aleman", tipo: "banco" };
+    }
   }
   window.actualizarResumenPrestamo = actualizarResumenPrestamo;
 
@@ -2107,13 +2172,15 @@ function abrirPrestamos() {
     alert(`✅ Préstamo de ${fmt(p.monto)} aprobado en ${p.banco}. Te cobran ${tasaTxt}%/mes mientras debas.`);
   };
 
-  // Pagar un mes adelantado (interés sobre saldo deudor + cuota de capital) — Sistema Alemán
+  // Pagar un mes adelantado (interés sobre saldo + capital). Francés: cuota fija; Alemán: capital fijo.
   window.pagarCuota = (idx) => {
     const j = estado.jugadores[estado.jugadorActual];
     const p = j.prestamos[idx];
     if (!p) return;
     const interes = Math.round(p.principal * p.tasaMensual);
-    const capital = Math.min(p.cuotaPrincipal, p.principal);
+    const capital = (p.sistema === "frances")
+      ? Math.min(Math.max(0, Math.round(p.cuotaFija - interes)), p.principal)
+      : Math.min(p.cuotaPrincipal, p.principal);
     const pago = interes + capital;
     if (j.saldo < pago) { alert(`No te alcanza para pagar el mes (${fmt(pago)} = ${fmt(interes)} interés + ${fmt(capital)} capital). Tenés ${fmt(j.saldo)}.`); return; }
     j.saldo -= pago;
@@ -2179,15 +2246,26 @@ function abrirPrestamos() {
     if (j.prestamos.length > 0) {
       html += `<div style="margin-top:16px;border-top:1px solid var(--gris-med);padding-top:12px;">
         <p style="font-weight:600;font-size:14px;margin-bottom:8px;">Deudas actuales:</p>
-        ${j.prestamos.map((p, idx) => `
+        ${j.prestamos.map((p, idx) => {
+          const interes = Math.round(p.principal * p.tasaMensual);
+          let infoCuota;
+          if (p.tipo === "jugador") {
+            infoCuota = `Resta: ${fmt(p.principal)}<br>Cuota: ${fmt(p.cuotaPrincipal)}/mes`;
+          } else if (p.sistema === "frances") {
+            infoCuota = `Capital restante: ${fmt(p.principal)}<br>Cuota fija (Francés): ${fmt(Math.min(p.cuotaFija, p.principal + interes))}/mes`;
+          } else {
+            const cap = Math.min(p.cuotaPrincipal, p.principal);
+            infoCuota = `Capital restante: ${fmt(p.principal)}<br>Próxima cuota (Alemán): ${fmt(cap + interes)} (${fmt(cap)} cap + ${fmt(interes)} int) · baja cada mes`;
+          }
+          return `
           <div style="background:var(--gris);border-radius:8px;padding:10px;margin-bottom:6px;font-size:13px;">
-            <div style="margin-bottom:8px;"><strong>${p.banco}</strong> — ${p.tipo === "jugador" ? "Resta" : "Capital restante"}: ${fmt(p.principal)}<br>${p.tipo === "jugador" ? `Cuota: ${fmt(p.cuotaPrincipal)}/mes` : `Próxima cuota: ${fmt(Math.min(p.cuotaPrincipal, p.principal) + Math.round(p.principal * p.tasaMensual))} (${fmt(Math.min(p.cuotaPrincipal, p.principal))} cap + ${fmt(Math.round(p.principal * p.tasaMensual))} int)`}</div>
+            <div style="margin-bottom:8px;"><strong>${p.banco}</strong> — ${infoCuota}</div>
             <div style="display:flex;gap:8px;">
               <button class="btn btn-secondary btn-sm" onclick="pagarCuota(${idx})" style="flex:1;">Pagar 1 mes</button>
               <button class="btn btn-rojo btn-sm" onclick="cancelarDeuda(${idx})" style="flex:1;">Cancelar todo</button>
             </div>
-          </div>
-        `).join("")}
+          </div>`;
+        }).join("")}
       </div>`;
     }
 

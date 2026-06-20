@@ -249,7 +249,7 @@ const EMPRESAS = [
 // perdMin/perdRange = magnitud de la pérdida en un mal mes (× el retorno base)
 const MODOS_EMPRESA = {
   estable:  { label: "Estable",  emoji: "🛡️", mult: 0.70, pMal: 0.00, pFlojo: 0.10, perdMin: 0,   perdRange: 0,   desc: "Rinde menos (70%) pero casi nunca falla. Seguro." },
-  normal:   { label: "Normal",   emoji: "⚖️", mult: 1.00, pMal: 0.08, pFlojo: 0.12, perdMin: 0.8, perdRange: 0.7, desc: "Equilibrado: rinde 100%, riesgo medio." },
+  normal:   { label: "Normal",   emoji: "⚖️", mult: 1.00, pMal: 0.05, pFlojo: 0.10, perdMin: 0.4, perdRange: 0.4, desc: "Equilibrado: rinde 100%, casi siempre te da plata." },
   agresiva: { label: "Agresiva", emoji: "🚀", mult: 1.60, pMal: 0.20, pFlojo: 0.10, perdMin: 1.0, perdRange: 1.0, desc: "Rinde 160% cuando va bien, pero más meses malos y pérdidas grandes." }
 };
 
@@ -280,8 +280,8 @@ const BANCOS = [
   { nombre: "Banco Nación", emoji: "🏛️", tasa: 0.010, maximo: 30000000, cuotas: [12, 24, 36], maxPorSemestre: 2, beneficio: "El interés más bajo (1.0%/mes)" },
   { nombre: "Banco Provincia", emoji: "🏦", tasa: 0.015, maximo: 60000000, cuotas: [12, 24], maxPorSemestre: 2, beneficio: "Presta los montos más altos" },
   { nombre: "Banco Galicia", emoji: "🔵", tasa: 0.018, maximo: 40000000, cuotas: [12, 24, 36, 48], maxPorSemestre: 1, beneficio: "Hasta 48 meses, pero 1 crédito por semestre" },
-  { nombre: "Brubank", emoji: "📲", tasa: 0.025, maximo: 15000000, cuotas: [6, 12], maxPorSemestre: 2, beneficio: "No te exige patrimonio: presta igual", ignoraPatrimonio: true },
-  { nombre: "Mercado Pago", emoji: "💳", tasa: 0.030, maximo: 8000000, cuotas: [3, 6, 12], maxPorSemestre: 2, beneficio: "Adelanto rápido para emergencias" }
+  { nombre: "Brubank", emoji: "📲", tasa: 0.025, maximo: 15000000, cuotas: [6, 12], maxPorSemestre: 2, beneficio: "No te exige patrimonio + cuota fija (sistema francés)", ignoraPatrimonio: true, sistema: "frances" },
+  { nombre: "Mercado Pago", emoji: "💳", tasa: 0.030, maximo: 8000000, cuotas: [3, 6, 12], maxPorSemestre: 2, beneficio: "Adelanto rápido con cuota fija (sistema francés)", sistema: "frances" }
 ];
 
 // Noticias del mes: algunas mueven el mercado (efectos), otras son color.
@@ -311,18 +311,18 @@ const META_VICTORIA = 500000000;
 // Multiplicador de los beneficios de eventos positivos (+10%)
 const BONUS_BENEFICIOS = 1.10;
 
-// Refuerzo extra a TODOS los eventos positivos (+20%), para aliviar la dificultad (sobre todo en 2 jugadores)
-const BOOST_POSITIVOS = 1.20;
+// Refuerzo extra a TODOS los eventos positivos (+50%), para aliviar la dificultad y dar más oxígeno
+const BOOST_POSITIVOS = 1.50;
 
 // Logros: se desbloquean una sola vez cuando check(j) da true. patrimonio() usa calcularPatrimonio (global en runtime).
 const LOGROS = [
-  { id: "empresa1",   emoji: "🏢", titulo: "Primera empresa",            check: j => j.empresas.length >= 1 },
-  { id: "propiedad1", emoji: "🏠", titulo: "Primera propiedad",          check: j => j.propiedades.length >= 1 },
-  { id: "inversion1", emoji: "📈", titulo: "Primera inversión",          check: j => j.acciones.length >= 1 },
-  { id: "prestamo1",  emoji: "🏦", titulo: "Primer préstamo",            check: j => j.prestamos.length >= 1 },
-  { id: "seguro1",    emoji: "🛡️", titulo: "Asegurado",                  check: j => !!j.seguro },
-  { id: "millon",     emoji: "💵", titulo: "Primer millón",              check: j => calcularPatrimonio(j) >= 1000000 },
-  { id: "ri",         emoji: "🏛️", titulo: "Responsable Inscripto",      check: j => j._estadoImpositivo === "Responsable Inscripto" },
-  { id: "imperio",    emoji: "🚀", titulo: "Pequeño imperio (5 empresas)", check: j => j.empresas.length >= 5 },
-  { id: "multi",      emoji: "💰", titulo: "Multimillonario ($100M)",    check: j => calcularPatrimonio(j) >= 100000000 }
+  { id: "empresa1",   emoji: "🏢", titulo: "Primera empresa",            desc: "Compraste tu primera empresa.",                       check: j => j.empresas.length >= 1 },
+  { id: "propiedad1", emoji: "🏠", titulo: "Primera propiedad",          desc: "Compraste tu primera propiedad.",                     check: j => j.propiedades.length >= 1 },
+  { id: "inversion1", emoji: "📈", titulo: "Primera inversión",          desc: "Compraste tu primera acción o FCI.",                  check: j => j.acciones.length >= 1 },
+  { id: "prestamo1",  emoji: "🏦", titulo: "Primer préstamo",            desc: "Pediste tu primer crédito.",                          check: j => j.prestamos.length >= 1 },
+  { id: "seguro1",    emoji: "🛡️", titulo: "Asegurado",                  desc: "Contrataste un seguro contra quiebra.",               check: j => !!j.seguro },
+  { id: "millon",     emoji: "💵", titulo: "Primer millón",              desc: "Tu patrimonio superó el millón de pesos.",            check: j => calcularPatrimonio(j) >= 1000000 },
+  { id: "ri",         emoji: "🏛️", titulo: "Responsable Inscripto",      desc: "Creciste tanto que pasaste de Monotributo a RI.",     check: j => j._estadoImpositivo === "Responsable Inscripto" },
+  { id: "imperio",    emoji: "🚀", titulo: "Pequeño imperio",            desc: "Llegaste a tener 5 empresas a la vez.",               check: j => j.empresas.length >= 5 },
+  { id: "multi",      emoji: "💰", titulo: "Multimillonario",            desc: "Tu patrimonio superó los $100.000.000.",              check: j => calcularPatrimonio(j) >= 100000000 }
 ];
