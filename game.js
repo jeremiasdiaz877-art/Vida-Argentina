@@ -460,7 +460,8 @@ function crearJugadorBase(nombre, avatar) {
     _estadoImpositivo: "Monotributo (Cat. A)", // arrancan como monotributistas
     _saldoIvaAFavor: 0,                         // sin saldo a favor de IVA al inicio
     // Acumuladores para el "briteo" final (cómo te hiciste rico)
-    _statSueldo: 0, _statEmpresas: 0, _statAlquileres: 0, _statEventos: 0, _statInversiones: 0
+    _statSueldo: 0, _statEmpresas: 0, _statAlquileres: 0, _statEventos: 0, _statInversiones: 0,
+    _logros: [] // ids de logros desbloqueados
   };
 }
 
@@ -1083,12 +1084,12 @@ function procesarTurno(dado, auto) {
     // 3-4: neutro o pequeña oportunidad (50%)
     if (Math.random() < 0.5) {
       evento = positivos[Math.floor(Math.random() * positivos.length)];
-      impactoEvento = Math.round(evento.impacto(j.saldo, patri) * 0.4); // oportunidad chica
+      impactoEvento = Math.round(evento.impacto(j.saldo, patri) * 0.4 * BOOST_POSITIVOS); // oportunidad chica (+20%)
     }
   } else {
-    // 5-6: evento positivo (pleno, con el +10% de beneficios)
+    // 5-6: evento positivo (pleno, con el +10% de beneficios y +20% de refuerzo)
     evento = positivos[Math.floor(Math.random() * positivos.length)];
-    impactoEvento = Math.round(evento.impacto(j.saldo, patri) * BONUS_BENEFICIOS);
+    impactoEvento = Math.round(evento.impacto(j.saldo, patri) * BONUS_BENEFICIOS * BOOST_POSITIVOS);
   }
   let eventoIvaAFavor = false;
   if (evento && !esEventoDecision) {
@@ -1226,6 +1227,7 @@ function liquidarGananciasRI(base) {
 
 // Muestra el resumen del turno (con o sin evento) y el desglose de ingresos/gastos
 function mostrarResumenTurno(j) {
+  chequearLogros(j); // hitos de fin de turno (patrimonio, régimen, etc.)
   const r = j._resumen;
   const cambioNeto = r.saldoDespues - r.saldoAntes;
 
@@ -1863,8 +1865,8 @@ async function doLogin() {
   }
 }
 
-// "Briteo": desglose visual de cómo el jugador hizo su plata (para compartir captura)
-function renderDesgloseIngresos(j) {
+// "Briteo": barras de cómo cada jugador hizo su plata (sin tarjeta exterior, para meter en el carrusel)
+function barrasIngresos(j) {
   const cats = [
     { label: "💵 Sueldo", val: j._statSueldo || 0, color: "#4a90d9" },
     { label: "🏢 Empresas", val: j._statEmpresas || 0, color: "#00b894" },
@@ -1873,11 +1875,11 @@ function renderDesgloseIngresos(j) {
     { label: "🎁 Eventos y decisiones", val: j._statEventos || 0, color: "#a29bfe" }
   ].filter(c => c.val > 0).sort((a, b) => b.val - a.val);
   const total = cats.reduce((s, c) => s + c.val, 0);
-  if (total <= 0) return "";
-  const filas = cats.map(c => {
+  if (total <= 0) return `<div style="font-size:12px;color:var(--gris-dark);text-align:center;padding:8px 0;">Sin ingresos registrados</div>`;
+  return cats.map(c => {
     const pct = Math.round(c.val / total * 100);
     return `<div style="margin-bottom:8px;">
-      <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:3px;">
+      <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px;">
         <span>${c.label}</span><span style="font-weight:700;">${fmt(c.val)} · ${pct}%</span>
       </div>
       <div style="background:var(--gris-med);border-radius:6px;height:10px;overflow:hidden;">
@@ -1885,15 +1887,74 @@ function renderDesgloseIngresos(j) {
       </div>
     </div>`;
   }).join("");
-  return `<div style="background:#fff;border:1px solid var(--gris-med);border-radius:14px;padding:16px;margin-top:16px;box-shadow:0 4px 16px rgba(26,58,107,0.08);">
-    <div style="font-weight:800;color:var(--azul);font-size:14px;margin-bottom:12px;text-align:center;">💰 Cómo se hizo la plata</div>
-    ${filas}
-    <div style="font-size:11px;color:var(--gris-dark);text-align:center;margin-top:8px;">📸 Sacale captura y compartilo · Vida Argentina 🇦🇷</div>
-  </div>`;
+}
+
+// Carrusel de resultados: una tarjeta por jugador (nombre + patrimonio + cómo hizo la plata)
+function renderCarruselResultados() {
+  const ranking = [...estado.jugadores].sort((a, b) => calcularPatrimonio(b) - calcularPatrimonio(a));
+  const posEmojis = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣", "6️⃣", "7️⃣"];
+  const unico = ranking.length === 1;
+  const cards = ranking.map((j, i) => `
+    <div style="flex:0 0 ${unico ? "100%" : "85%"};scroll-snap-align:center;background:#fff;border-radius:14px;padding:14px;box-shadow:0 4px 16px rgba(26,58,107,0.1);${i === 0 ? "border:2px solid var(--amarillo);" : "border:1px solid var(--gris-med);"}">
+      <div style="text-align:center;font-weight:800;color:var(--azul);font-size:15px;">${posEmojis[i] || (i + 1) + "º"} ${j.avatar} ${j.nombre}</div>
+      <div style="text-align:center;color:var(--azul);font-weight:800;font-size:18px;margin:4px 0 12px;">${fmt(calcularPatrimonio(j))}</div>
+      <div style="font-weight:700;color:var(--gris-dark);font-size:12px;margin-bottom:8px;text-align:center;">💰 Cómo hizo la plata</div>
+      ${barrasIngresos(j)}
+    </div>`).join("");
+  return `
+    <div style="display:flex;gap:12px;overflow-x:auto;scroll-snap-type:x mandatory;padding:4px 2px 10px;-webkit-overflow-scrolling:touch;scrollbar-width:none;">${cards}</div>
+    ${!unico ? `<div style="text-align:center;font-size:11px;color:var(--gris-dark);">← deslizá para ver a los ${ranking.length} jugadores →</div>` : ""}
+    <div style="font-size:11px;color:var(--gris-dark);text-align:center;margin-top:8px;">📸 Sacale captura y compartilo · Vida Argentina 🇦🇷</div>`;
+}
+
+// ==================== LOGROS ====================
+// Revisa si el jugador desbloqueó logros nuevos y los muestra (una sola vez cada uno)
+function chequearLogros(j) {
+  if (!j._logros) j._logros = [];
+  LOGROS.forEach(l => {
+    if (!j._logros.includes(l.id) && l.check(j)) {
+      j._logros.push(l.id);
+      mostrarLogro(l);
+    }
+  });
+}
+
+let _logroCola = [], _logroMostrando = false;
+function mostrarLogro(logro) {
+  _logroCola.push(logro);
+  if (!_logroMostrando) procesarColaLogros();
+}
+function procesarColaLogros() {
+  if (_logroCola.length === 0) { _logroMostrando = false; return; }
+  _logroMostrando = true;
+  const logro = _logroCola.shift();
+  const el = document.createElement("div");
+  el.className = "logro-toast";
+  el.innerHTML = `<span class="logro-head">🏆 ¡LOGRO DESBLOQUEADO!</span>${logro.emoji} ${logro.titulo}`;
+  document.body.appendChild(el);
+  requestAnimationFrame(() => el.classList.add("show"));
+  setTimeout(() => {
+    el.classList.remove("show");
+    setTimeout(() => { el.remove(); procesarColaLogros(); }, 500);
+  }, 2600);
+}
+
+// Explosión de confeti para celebrar (degradación silenciosa si el CDN no cargó)
+function lanzarConfetti() {
+  if (typeof confetti !== "function") return;
+  const colors = ["#74b9ff", "#ffffff", "#f9ca24", "#4a90d9", "#00b894"];
+  confetti({ particleCount: 140, spread: 90, origin: { y: 0.6 }, colors });
+  const fin = Date.now() + 2500;
+  (function frame() {
+    confetti({ particleCount: 5, angle: 60, spread: 55, origin: { x: 0 }, colors });
+    confetti({ particleCount: 5, angle: 120, spread: 55, origin: { x: 1 }, colors });
+    if (Date.now() < fin) requestAnimationFrame(frame);
+  })();
 }
 
 function mostrarPantallaVictoria(ganador) {
   mostrarPantalla("pantalla-victoria");
+  lanzarConfetti();
   // Título y emoji según CÓMO ganó
   const tipos = {
     inmobiliario: { emoji: "🏙️", titulo: "¡MAGNATE INMOBILIARIO!", sub: `Reuniste ${META_PROPIEDADES_PREMIUM} propiedades premium` },
@@ -1907,17 +1968,10 @@ function mostrarPantallaVictoria(ganador) {
   document.getElementById("victoria-nombre").textContent = `${ganador.avatar} ${ganador.nombre}`;
   document.getElementById("victoria-saldo").innerHTML = `<div>${t.sub}</div><div style="margin-top:4px;">Patrimonio: ${fmt(calcularPatrimonio(ganador))}</div>`;
 
-  const ranking = [...estado.jugadores].sort((a, b) => calcularPatrimonio(b) - calcularPatrimonio(a));
-  const posEmojis = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣", "6️⃣", "7️⃣"];
   // Si no hay sesión, invitamos a registrarse (solo los registrados entran al ranking global)
   const hint = getSesion() ? "" : `<div style="background:#eaf4ff;border:1px solid var(--celeste);border-radius:10px;padding:10px;margin-bottom:10px;font-size:12px;color:var(--azul);text-align:center;">🏆 Iniciá sesión para guardar tu patrimonio en el Salón de la Fama global.</div>`;
-  document.getElementById("ranking-final").innerHTML = hint + ranking.map((j, i) => `
-    <div class="ranking-item">
-      <span class="ranking-pos">${posEmojis[i]}</span>
-      <span class="ranking-nombre">${j.avatar} ${j.nombre}</span>
-      <span class="ranking-saldo">${fmt(calcularPatrimonio(j))}</span>
-    </div>
-  `).join("") + renderDesgloseIngresos(ganador);
+  // Carrusel con la tarjeta de cada jugador (nombre + patrimonio + cómo hizo la plata)
+  document.getElementById("ranking-final").innerHTML = hint + renderCarruselResultados();
 }
 
 function reiniciarJuego() {
@@ -2047,6 +2101,7 @@ function abrirPrestamos() {
     window._prestamoPendiente = null;
     cerrarModal("modal-prestamos");
     actualizarHUD();
+    chequearLogros(j);
     if (online.activo) pushEstado();
     const tasaTxt = (p.tasaMensual * 100).toFixed(1);
     alert(`✅ Préstamo de ${fmt(p.monto)} aprobado en ${p.banco}. Te cobran ${tasaTxt}%/mes mientras debas.`);
@@ -2156,6 +2211,7 @@ function abrirSeguro() {
     j.saldo -= a.prima; // pagás el primer mes al contratar
     j.seguro = { nombre: a.nombre, emoji: a.emoji, cobertura: a.cobertura, coberturaTotal: a.cobertura, prima: a.prima, tasa: a.tasa };
     actualizarHUD();
+    chequearLogros(j);
     if (online.activo) pushEstado();
     render();
     alert(`🛡️ Contrataste ${a.nombre}.\nPagás ${fmt(a.prima)}/mes y te cubre hasta ${fmt(a.cobertura)} si quebrás sin activos.`);
@@ -2471,6 +2527,7 @@ function abrirInversiones() {
       j.acciones.push({ nombre: inst.nombre, emoji: inst.emoji, tipo: inst.tipo, cantidad: cant, precioCompra: precio });
     }
     actualizarHUD();
+    chequearLogros(j);
     if (online.activo) pushEstado();
     render();
     alert(`✅ Compraste ${cant} de ${inst.nombre} por ${fmt(total)}`);
@@ -2511,12 +2568,18 @@ function abrirEmpresas() {
       html += `<div style="background:var(--gris);border-radius:12px;padding:12px;margin-bottom:16px;">
         <p style="font-weight:700;font-size:13px;color:var(--azul);margin-bottom:2px;">🏢 Tus empresas — Estrategia</p>
         <p style="font-size:11px;color:var(--gris-dark);margin-bottom:10px;">🛡️ Estable: seguro, rinde menos · ⚖️ Normal: equilibrado · 🚀 Agresiva: rinde más pero más riesgo</p>`;
-      j.empresas.forEach((em, idx) => {
-        const mActual = em.modo || "normal";
+      // Agrupar por RUBRO (tipo): una sola tarjeta por tipo de empresa, no una por cada una comprada
+      const tipos = {};
+      j.empresas.forEach(em => {
+        if (!tipos[em.nombre]) tipos[em.nombre] = { emoji: em.emoji, nombre: em.nombre, retornoPorTurno: em.retornoPorTurno, cant: 0, modo: em.modo || "normal" };
+        tipos[em.nombre].cant++;
+      });
+      Object.values(tipos).forEach(t => {
+        const mActual = t.modo;
         html += `<div style="background:#fff;border-radius:10px;padding:8px 10px;margin-bottom:8px;">
-          <div style="font-size:13px;font-weight:600;color:var(--azul);margin-bottom:6px;">${em.emoji} ${em.nombre} <span style="color:var(--gris-dark);font-weight:500;">(+${fmt(em.retornoPorTurno)}/turno base)</span></div>
+          <div style="font-size:13px;font-weight:600;color:var(--azul);margin-bottom:6px;">${t.emoji} ${t.nombre}${t.cant > 1 ? ` <span style="color:var(--verde);">x${t.cant}</span>` : ""} <span style="color:var(--gris-dark);font-weight:500;">(+${fmt(t.retornoPorTurno)}/turno c/u)</span></div>
           <div style="display:flex;gap:6px;">
-            ${["estable", "normal", "agresiva"].map(mk => `<button class="btn ${mActual === mk ? "btn-primary" : "btn-secondary"} btn-sm" style="flex:1;padding:6px 4px;font-size:12px;" onclick="setModoEmpresa(${idx},'${mk}')">${MODOS_EMPRESA[mk].emoji} ${MODOS_EMPRESA[mk].label}</button>`).join("")}
+            ${["estable", "normal", "agresiva"].map(mk => `<button class="btn ${mActual === mk ? "btn-primary" : "btn-secondary"} btn-sm" style="flex:1;padding:6px 4px;font-size:12px;" onclick="setModoEmpresa('${t.nombre}','${mk}')">${MODOS_EMPRESA[mk].emoji} ${MODOS_EMPRESA[mk].label}</button>`).join("")}
           </div>
         </div>`;
       });
@@ -2542,10 +2605,11 @@ function abrirEmpresas() {
     document.getElementById("empresas-contenido").innerHTML = html;
   }
 
-  window.setModoEmpresa = (idx, modo) => {
+  window.setModoEmpresa = (nombre, modo) => {
     const j = estado.jugadores[estado.jugadorActual];
-    if (!j.empresas[idx] || !MODOS_EMPRESA[modo]) return;
-    j.empresas[idx].modo = modo;
+    if (!MODOS_EMPRESA[modo]) return;
+    // Aplica la estrategia a TODAS las empresas de ese rubro
+    j.empresas.forEach(em => { if (em.nombre === nombre) em.modo = modo; });
     if (online.activo) pushEstado();
     render();
   };
@@ -2557,6 +2621,7 @@ function abrirEmpresas() {
     j.saldo -= empresa.precio;
     j.empresas.push({ ...empresa, modo: "normal" });
     actualizarHUD();
+    chequearLogros(j);
     if (online.activo) pushEstado();
     render();
   };
@@ -2612,6 +2677,7 @@ function abrirPropiedades() {
     j.saldo -= prop.precio;
     j.propiedades.push({ ...prop });
     actualizarHUD();
+    chequearLogros(j);
     if (online.activo) pushEstado();
     render();
     // ¿Alcanzaste el Final Inmobiliario al comprar esta?

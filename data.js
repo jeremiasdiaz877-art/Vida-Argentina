@@ -48,6 +48,8 @@ const EVENTOS = [
   { emoji: "💸", titulo: "Bono de fin de año", desc: "Tu empresa pagó bono extraordinario. ¡Un regalo en pesos!", impacto: (s) => Math.round(s * 0.15), tipo: "pos" },
   { emoji: "📈", titulo: "Tus acciones subieron", desc: "El mercado estuvo favorable. Las acciones que tenías valorizaron.", impacto: (s) => 80000, tipo: "pos" },
   { emoji: "🎁", titulo: "Herencia inesperada", desc: "Un familiar lejano te dejó algo de plata. ¡Viva la familia!", impacto: (s) => 200000, tipo: "pos" },
+  { emoji: "🤝", titulo: "Cerraste un contrato enorme", desc: "Un cliente grande firmó un contrato millonario con vos. ¡Lluvia de plata!", impacto: (s) => 1000000, tipo: "pos" },
+  { emoji: "🏆", titulo: "Ganaste una licitación", desc: "Te adjudicaron una obra/servicio del Estado. Entró un adelanto enorme.", impacto: (s) => 1000000, tipo: "pos" },
   { emoji: "💼", titulo: "Oferta de trabajo mejor", desc: "Te ofrecieron un puesto mejor pagado. Aceptaste sin dudarlo.", impacto: (s) => Math.round(s * 0.10), tipo: "pos" },
   { emoji: "🏆", titulo: "Premio por desempeño", desc: "Tu jefe reconoció tu trabajo. Aumentaste el sueldo del mes.", impacto: (s) => 60000, tipo: "pos" },
   { emoji: "🌟", titulo: "Freelance exitoso", desc: "Hiciste un trabajo extra y cobaste bien. Las changas rinden.", impacto: (s) => 120000, tipo: "pos" },
@@ -147,6 +149,66 @@ const EVENTOS = [
         ? { impacto: 500000, texto: "¡Se hizo viral! Las ventas explotaron y recuperaste la inversión con creces." }
         : { impacto: -200000, texto: "La campaña no pegó. Gastaste la plata y casi no movió la aguja." } },
       { texto: "No gastar en publicidad", resolver: () => ({ impacto: 0, texto: "Preferiste cuidar la caja. Tu negocio sigue como siempre." }) }
+    ]
+  },
+  {
+    emoji: "🎰", titulo: "Noche de casino", tipo: "decision",
+    desc: "Unos amigos te arrastran al casino. La timba te llama y tenés unos pesos en el bolsillo.",
+    opciones: [
+      { texto: "Apostar fuerte", resolver: () => Math.random() < 0.45
+        ? { impacto: 500000, texto: "¡Pleno! Saliste del casino como un campeón. La suerte estuvo de tu lado." }
+        : { impacto: -350000, texto: "La banca siempre gana. Volviste a casa con los bolsillos vacíos." } },
+      { texto: "Quedarte en casa", resolver: () => ({ impacto: 0, texto: "Mejor no tentar a la suerte. Te quedaste tranquilo viendo una serie." }) }
+    ]
+  },
+  {
+    emoji: "🐕", titulo: "Se enfermó el perro", tipo: "decision",
+    desc: "Tu perro amaneció mal. El veterinario te ofrece un tratamiento completo, pero no es barato.",
+    opciones: [
+      { texto: "Pagar el veterinario ($150.000)", resolver: () => ({ impacto: -150000, texto: "Caro, pero tu compañero se recuperó y te llena de besos. No tiene precio." }) },
+      { texto: "Probar remedios caseros", resolver: () => Math.random() < 0.5
+        ? { impacto: 0, texto: "Era una panza floja nomás. Se curó solo y no gastaste un peso." }
+        : { impacto: -350000, texto: "Empeoró y terminaste en la guardia veterinaria de urgencia. Salió carísimo." } }
+    ]
+  },
+  {
+    emoji: "🤝", titulo: "Un amigo te pide plata", tipo: "decision",
+    desc: "Un amigo está en una mala y te pide $200.000 prestados. Jura que te los devuelve.",
+    opciones: [
+      { texto: "Prestarle la plata", resolver: () => Math.random() < 0.6
+        ? { impacto: 250000, texto: "Cumplió: te devolvió todo con un asado de regalo incluido. Amigos así valen oro." }
+        : { impacto: -200000, texto: "Desapareció del grupo de WhatsApp. La plata no volvió nunca más." } },
+      { texto: "\"Justo ando corto\"", resolver: () => ({ impacto: 0, texto: "Le dijiste que no podías. Quedó la relación medio fría, pero tu plata está a salvo." }) }
+    ]
+  },
+  {
+    emoji: "📦", titulo: "Oportunidad de importación", tipo: "decision",
+    desc: "Un conocido trae un contenedor de mercadería de afuera y te ofrece sumarte poniendo $300.000.",
+    opciones: [
+      { texto: "Poner la plata", resolver: () => Math.random() < 0.55
+        ? { impacto: 600000, texto: "Llegó todo, se vendió rapidísimo y duplicaste la inversión. ¡Gran negocio!" }
+        : { impacto: -300000, texto: "La aduana frenó el contenedor. Entre la coima y los costos, perdiste la plata." } },
+      { texto: "No arriesgarte", resolver: () => ({ impacto: 0, texto: "Demasiado riesgo con la aduana. Preferiste no meterte." }) }
+    ]
+  },
+  {
+    emoji: "💼", titulo: "Changa en negro", tipo: "decision",
+    desc: "Te ofrecen un trabajo extra muy bien pago, pero sin factura ni recibo. O lo hacés todo en blanco por menos.",
+    opciones: [
+      { texto: "Aceptar en negro", resolver: () => Math.random() < 0.75
+        ? { impacto: 300000, texto: "Cobraste todo en mano y sin descuentos. Un golazo." }
+        : { impacto: -150000, texto: "El cliente te hizo un quilombo, no te pagó y encima perdiste tiempo y materiales." } },
+      { texto: "Hacerlo en blanco", resolver: () => ({ impacto: 120000, texto: "Cobraste menos pero con factura y tranquilidad. Todo legal." }) }
+    ]
+  },
+  {
+    emoji: "🎓", titulo: "Curso de criptomonedas", tipo: "decision",
+    desc: "Un \"gurú\" de Instagram promete enseñarte a hacerte rico con cripto en 30 días. El curso sale $180.000.",
+    opciones: [
+      { texto: "Pagar el curso", resolver: () => Math.random() < 0.45
+        ? { impacto: 450000, texto: "Algo bueno aprendiste: hiciste un par de operaciones y recuperaste con ganancia." }
+        : { impacto: -180000, texto: "Era todo humo y frases motivacionales. Tiraste la plata a la basura." } },
+      { texto: "Mirar tutoriales gratis", resolver: () => ({ impacto: 0, texto: "Para qué pagar: YouTube tiene todo gratis. Te ahorraste la plata." }) }
     ]
   }
 ];
@@ -248,3 +310,19 @@ const META_VICTORIA = 500000000;
 
 // Multiplicador de los beneficios de eventos positivos (+10%)
 const BONUS_BENEFICIOS = 1.10;
+
+// Refuerzo extra a TODOS los eventos positivos (+20%), para aliviar la dificultad (sobre todo en 2 jugadores)
+const BOOST_POSITIVOS = 1.20;
+
+// Logros: se desbloquean una sola vez cuando check(j) da true. patrimonio() usa calcularPatrimonio (global en runtime).
+const LOGROS = [
+  { id: "empresa1",   emoji: "🏢", titulo: "Primera empresa",            check: j => j.empresas.length >= 1 },
+  { id: "propiedad1", emoji: "🏠", titulo: "Primera propiedad",          check: j => j.propiedades.length >= 1 },
+  { id: "inversion1", emoji: "📈", titulo: "Primera inversión",          check: j => j.acciones.length >= 1 },
+  { id: "prestamo1",  emoji: "🏦", titulo: "Primer préstamo",            check: j => j.prestamos.length >= 1 },
+  { id: "seguro1",    emoji: "🛡️", titulo: "Asegurado",                  check: j => !!j.seguro },
+  { id: "millon",     emoji: "💵", titulo: "Primer millón",              check: j => calcularPatrimonio(j) >= 1000000 },
+  { id: "ri",         emoji: "🏛️", titulo: "Responsable Inscripto",      check: j => j._estadoImpositivo === "Responsable Inscripto" },
+  { id: "imperio",    emoji: "🚀", titulo: "Pequeño imperio (5 empresas)", check: j => j.empresas.length >= 5 },
+  { id: "multi",      emoji: "💰", titulo: "Multimillonario ($100M)",    check: j => calcularPatrimonio(j) >= 100000000 }
+];
