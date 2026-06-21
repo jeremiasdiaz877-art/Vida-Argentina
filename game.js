@@ -820,7 +820,13 @@ function actualizarTurno() {
   document.getElementById("turno-info-sub").textContent = `📅 ${fechaJugador(j)} • Edad: ${j.edad} años`;
   document.getElementById("btn-tirar").style.display = "flex";
   document.getElementById("btn-siguiente").style.display = "none";
-  document.getElementById("dado-display").innerHTML = CARTA_DORSO;
+  // Reset visual de la carta (vuelve al dorso azul, sin colores del resultado anterior)
+  const dadoDisplay = document.getElementById("dado-display");
+  dadoDisplay.innerHTML = CARTA_DORSO;
+  dadoDisplay.style.background = "";
+  dadoDisplay.style.boxShadow = "";
+  dadoDisplay.style.transition = "";
+  dadoDisplay.style.transform = "rotateY(0deg) scale(1)";
   const resEl = document.getElementById("dado-resultado");
   if (resEl) resEl.innerHTML = "";
   actualizarMercadoPanel();
@@ -903,20 +909,68 @@ const CARTA_DORSO = '<span class="carta-icono">🃏</span><span>CARTA<br>DEL MES
 function tirarDado() {
   if (!esMiTurno() || tirando) return; // online: solo actúa el jugador del turno
   tirando = true;
-  const carta = document.getElementById("dado-display");
   const res = document.getElementById("dado-resultado");
   document.getElementById("btn-tirar").style.display = "none";
-  if (res) res.innerHTML = `<div style="font-size:14px;color:var(--gris-dark);">Levantando la carta del mes...</div>`;
+  if (res) res.innerHTML = `<div style="font-size:14px;color:var(--gris-dark);">Levantando la carta...</div>`;
 
-  // El número (1-6) sigue existiendo por dentro para la suerte, pero NO se muestra: la carta es la sorpresa
+  // El número (1-6) decide la suerte por dentro; la revelación visual ocurre al final de procesarTurno
   const resultado = Math.floor(Math.random() * 6) + 1;
-  carta.classList.add("flip");
+  procesarTurno(resultado);
+}
+
+// Da vuelta la carta en 3D, revela el resultado en la propia carta (color según bueno/malo/dilema)
+// y recién después abre el modal del resumen o del dilema.
+function animarRevelacionCarta(j, esDecision, evento) {
+  const carta = document.getElementById("dado-display");
+  const res = document.getElementById("dado-resultado");
+
+  // 1) Giro a 90° (la carta queda de perfil y "desaparece" un instante)
+  carta.style.transition = "transform 0.4s ease-in";
+  carta.style.transform = "rotateY(90deg) scale(1.1)";
+
   setTimeout(() => {
-    carta.classList.remove("flip");
-    if (res) res.innerHTML = "";
-    tirando = false;
-    procesarTurno(resultado);
-  }, 800);
+    // 2) A mitad del giro cambiamos la cara (color + contenido del resultado)
+    let htmlCarta, colorFondo = "linear-gradient(150deg, var(--azul-claro), var(--azul))", sombra = "";
+    if (evento && esDecision) {
+      colorFondo = "linear-gradient(135deg, #f39c12, #d35400)";
+      sombra = "0 10px 30px rgba(243, 156, 18, 0.6)";
+      htmlCarta = `<div style="font-size:44px;margin-bottom:8px;">🤔</div><div style="font-size:14px;font-weight:800;line-height:1.2;">DILEMA</div><div style="font-size:11px;opacity:0.9;margin-top:4px;">Toca decidir</div>`;
+    } else if (evento) {
+      const impacto = j._resumen.impactoEvento || 0;
+      if (impacto >= 0) {
+        colorFondo = "linear-gradient(135deg, #00b894, #00cec9)";
+        sombra = "0 10px 30px rgba(0, 184, 148, 0.6)";
+        htmlCarta = `<div style="font-size:44px;margin-bottom:8px;">${evento.emoji}</div><div style="font-size:13px;font-weight:800;line-height:1.2;">${evento.titulo}</div><div style="font-size:15px;font-weight:900;margin-top:6px;">+${fmt(impacto)}</div>`;
+      } else {
+        colorFondo = "linear-gradient(135deg, #d63031, #e17055)";
+        sombra = "0 10px 30px rgba(214, 48, 49, 0.6)";
+        htmlCarta = `<div style="font-size:44px;margin-bottom:8px;">${evento.emoji}</div><div style="font-size:13px;font-weight:800;line-height:1.2;">${evento.titulo}</div><div style="font-size:15px;font-weight:900;margin-top:6px;">−${fmt(Math.abs(impacto))}</div>`;
+      }
+    } else {
+      colorFondo = "linear-gradient(135deg, #636e72, #b2bec3)";
+      htmlCarta = `<div style="font-size:44px;margin-bottom:8px;">🍃</div><div style="font-size:14px;font-weight:800;line-height:1.2;">Mes<br>Tranquilo</div>`;
+    }
+    carta.style.background = colorFondo;
+    carta.style.boxShadow = sombra;
+    carta.innerHTML = htmlCarta;
+
+    // 3) Completa el giro a 0° para mostrar la cara revelada
+    carta.style.transition = "transform 0.4s ease-out";
+    carta.style.transform = "rotateY(0deg) scale(1)";
+    if (res) res.innerHTML = `<div style="font-size:14px;font-weight:600;color:var(--azul);">¡Viendo resultado!</div>`;
+
+    // 4) Pausa para leer la carta y recién ahí salta el modal
+    setTimeout(() => {
+      tirando = false;
+      if (res) res.innerHTML = "";
+      if (esDecision) {
+        mostrarModalDecision(evento, j);
+      } else {
+        mostrarResumenTurno(j);
+        if (online.activo) pushEstado();
+      }
+    }, 1800);
+  }, 400);
 }
 
 function procesarTurno(dado, auto) {
@@ -1149,7 +1203,7 @@ function procesarTurno(dado, auto) {
       // Sin jugador (tiempo agotado / bot): se elige al azar y sigue
       aplicarDecision(j, evento, Math.floor(Math.random() * evento.opciones.length));
     } else {
-      mostrarModalDecision(evento, j); // el turno continúa en resolverDecision()
+      animarRevelacionCarta(j, true, evento); // revela la carta y luego abre el dilema
       return;
     }
   }
@@ -1162,8 +1216,7 @@ function procesarTurno(dado, auto) {
     return;
   }
 
-  mostrarResumenTurno(j);
-  if (online.activo) pushEstado(); // sincronizar el resultado del turno
+  animarRevelacionCarta(j, false, evento); // revela la carta y luego abre el resumen del mes
 }
 
 // ==================== EVENTOS-DECISIÓN (DILEMAS) ====================
